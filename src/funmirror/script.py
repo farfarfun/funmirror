@@ -7,9 +7,9 @@ from typing import List
 
 from farlog import get_logger
 
-from funmirror import platforms
-from funmirror.mirror import MirrorContext
-from funmirror.pipeline import run_mirror
+from funmirror.sync import platforms
+from funmirror.sync.mirror import MirrorContext
+from funmirror.sync.pipeline import run_mirror
 
 logger = get_logger("funmirror")
 

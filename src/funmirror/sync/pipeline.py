@@ -5,7 +5,7 @@ from typing import Dict, List
 from farlog import get_logger
 from funworker import BaseConsumer, BaseProcessor, BaseProducer, Pipeline
 
-from funmirror.mirror import MirrorContext, MirrorResult, mirror_one
+from funmirror.sync.mirror import MirrorContext, MirrorResult, mirror_one
 
 logger = get_logger("funmirror")
 

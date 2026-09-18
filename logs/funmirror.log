@@ -1,4 +1,0 @@
-2026-09-18 17:45:54.439 |INFO    | funmirror.mirror : mirror:  72 | funmirror | - repo1: doesn't exist on Gitee, creating
-2026-09-18 17:45:54.440 |ERROR   | funmirror.mirror : mirror:  81 | funmirror | - repo1: mirror failed: boom
-2026-09-18 17:47:56.286 |INFO    | funmirror.mirror : mirror:  72 | funmirror | - repo1: doesn't exist on Gitee, creating
-2026-09-18 17:47:56.287 |ERROR   | funmirror.mirror : mirror:  81 | funmirror | - repo1: mirror failed: boom

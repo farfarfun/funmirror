@@ -64,11 +64,24 @@ def github_branch_sha(
     return resp.json().get("commit", {}).get("sha")
 
 
+class GiteeRepoExistsError(RuntimeError):
+    """Raised when Gitee reports the destination repo already exists (idempotent create)."""
+
+
 def gitee_repo_exists(org: str, repo: str, token: str) -> bool:
     resp = _session.get(
         f"{GITEE_API}/repos/{org}/{repo}", params={"access_token": token}, timeout=30
     )
-    return resp.status_code == 200
+    if resp.status_code == 200:
+        return True
+    if resp.status_code == 404:
+        return False
+    # Anything else (rate limiting, transient 5xx, ...) is not a reliable signal
+    # that the repo is missing -- surface it instead of silently treating it as
+    # "doesn't exist", which would trigger a spurious (and failing) create call.
+    raise RuntimeError(
+        f"unexpected status checking {org}/{repo} on Gitee: {resp.status_code} {resp.text}"
+    )
 
 
 def gitee_branch_sha(org: str, repo: str, branch: str, token: str) -> Optional[str]:
@@ -88,9 +101,12 @@ def gitee_create_repo(org: str, repo: str, token: str) -> None:
         data={"name": repo, "access_token": token},
         timeout=30,
     )
-    if resp.status_code != 201:
-        raise RuntimeError(
-            f"failed to create {org}/{repo} on Gitee: {resp.status_code} {resp.text}"
-        )
-    # Gitee needs a moment before the new repo is ready to receive a push.
-    time.sleep(2)
+    if resp.status_code == 201:
+        # Gitee needs a moment before the new repo is ready to receive a push.
+        time.sleep(2)
+        return
+    if resp.status_code == 422 and "已存在同地址仓库" in resp.text:
+        raise GiteeRepoExistsError(f"{org}/{repo} already exists on Gitee")
+    raise RuntimeError(
+        f"failed to create {org}/{repo} on Gitee: {resp.status_code} {resp.text}"
+    )

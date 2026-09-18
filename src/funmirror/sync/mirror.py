@@ -10,7 +10,7 @@ from typing import Dict, List, Optional
 
 from farlog import get_logger
 
-from funmirror import platforms
+from funmirror.sync import platforms
 
 logger = get_logger("funmirror")
 
@@ -72,14 +72,27 @@ def mirror_one(repo: Dict, ctx: MirrorContext) -> MirrorResult:
             ctx.github_org, name, branch, ctx.github_token
         )
 
-        if platforms.gitee_repo_exists(ctx.gitee_org, name, ctx.gitee_token):
-            dst_sha = platforms.gitee_branch_sha(
-                ctx.gitee_org, name, branch, ctx.gitee_token
-            )
-        else:
+        exists = _retry(
+            platforms.gitee_repo_exists,
+            ctx.gitee_org,
+            name,
+            ctx.gitee_token,
+            attempts=3,
+            delay=2,
+        )
+        if not exists:
             logger.info(f"{name}: doesn't exist on Gitee, creating")
-            platforms.gitee_create_repo(ctx.gitee_org, name, ctx.gitee_token)
-            dst_sha = None
+            try:
+                platforms.gitee_create_repo(ctx.gitee_org, name, ctx.gitee_token)
+            except platforms.GiteeRepoExistsError:
+                logger.info(f"{name}: already existed on Gitee (race), continuing")
+            exists = True
+
+        dst_sha = (
+            platforms.gitee_branch_sha(ctx.gitee_org, name, branch, ctx.gitee_token)
+            if exists
+            else None
+        )
 
         if src_sha and src_sha == dst_sha:
             return MirrorResult(name, "skipped", "up to date")
