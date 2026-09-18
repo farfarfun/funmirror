@@ -62,6 +62,14 @@ def _mirror(args: argparse.Namespace) -> int:
         with open(step_summary, "a") as f:
             f.write(summary + "\n")
 
+    github_output = os.environ.get("GITHUB_OUTPUT")
+    if github_output:
+        with open(github_output, "a") as f:
+            f.write(f"mirrored={len(consumer.mirrored)}\n")
+            f.write(f"skipped={len(consumer.skipped)}\n")
+            f.write(f"failed={len(consumer.failed)}\n")
+            f.write(f"total={len(repos)}\n")
+
     if consumer.failed:
         logger.error(f"Failed: {', '.join(consumer.failed)}")
         return 1
