@@ -1,6 +1,16 @@
-"""GitHub -> Gitee mirror sync: parallel, skip-if-unchanged repo mirroring."""
+"""Sync between two hosting platforms: single repo or whole org."""
 
-from funmirror.sync.mirror import MirrorContext, MirrorResult, mirror_one
-from funmirror.sync.pipeline import run_mirror
+from funmirror.sync.platforms import GitHubPlatform, GiteePlatform, Platform, RepoRef
+from funmirror.sync.repo_sync import SyncContext, SyncResult, sync_repo
+from funmirror.sync.org_sync import sync_org
 
-__all__ = ["MirrorContext", "MirrorResult", "mirror_one", "run_mirror"]
+__all__ = [
+    "Platform",
+    "RepoRef",
+    "GitHubPlatform",
+    "GiteePlatform",
+    "SyncContext",
+    "SyncResult",
+    "sync_repo",
+    "sync_org",
+]

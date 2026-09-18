@@ -7,9 +7,7 @@ from typing import List
 
 from farlog import get_logger
 
-from funmirror.sync import platforms
-from funmirror.sync.mirror import MirrorContext
-from funmirror.sync.pipeline import run_mirror
+from funmirror.sync import GitHubPlatform, GiteePlatform, SyncContext, sync_org
 
 logger = get_logger("funmirror")
 
@@ -18,42 +16,23 @@ def _split_names(value: str) -> List[str]:
     return [n.strip() for n in value.split(",") if n.strip()]
 
 
-def _build_repo_list(args: argparse.Namespace) -> List[dict]:
-    if args.repo_names:
-        names = _split_names(args.repo_names)
-        return [
-            {
-                "name": name,
-                "default_branch": platforms.github_default_branch(
-                    args.github_org, name, args.github_token
-                )
-                or "master",
-            }
-            for name in names
-        ]
-    return platforms.list_github_repos(args.github_org, args.github_token)
-
-
 def _mirror(args: argparse.Namespace) -> int:
-    repos = _build_repo_list(args)
-    if not repos:
-        logger.warning("No repos to mirror")
-        return 0
+    src = GitHubPlatform(token=args.github_token)
+    dst = GiteePlatform(token=args.gitee_token, ssh_key_file=args.gitee_key_file)
+    ctx = SyncContext(src=src, dst=dst, force=args.force)
 
-    ctx = MirrorContext(
-        github_org=args.github_org,
-        gitee_org=args.gitee_org,
-        gitee_token=args.gitee_token,
-        gitee_key_file=args.gitee_key_file,
-        github_token=args.github_token,
-        force=args.force,
+    consumer = sync_org(
+        ctx,
+        args.github_org,
+        args.gitee_org,
+        repo_names=_split_names(args.repo_names) or None,
+        num_workers=args.workers,
     )
 
-    consumer = run_mirror(repos, ctx, num_workers=args.workers)
-
+    total = consumer.total
     summary = (
         f"Mirrored {len(consumer.mirrored)}, skipped {len(consumer.skipped)}, "
-        f"failed {len(consumer.failed)} (total {len(repos)})"
+        f"failed {len(consumer.failed)} (total {total})"
     )
     logger.info(summary)
 
@@ -68,7 +47,7 @@ def _mirror(args: argparse.Namespace) -> int:
             f.write(f"mirrored={len(consumer.mirrored)}\n")
             f.write(f"skipped={len(consumer.skipped)}\n")
             f.write(f"failed={len(consumer.failed)}\n")
-            f.write(f"total={len(repos)}\n")
+            f.write(f"total={total}\n")
 
     if consumer.failed:
         logger.error(f"Failed: {', '.join(consumer.failed)}")

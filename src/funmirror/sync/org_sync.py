@@ -1,17 +1,19 @@
-"""Parallel repo mirroring built on funworker's producer/processor/consumer pipeline."""
+"""Org sync: list repos on the source platform, fan out into N repo-sync tasks
+via funworker's producer/processor/consumer pipeline."""
 
-from typing import Dict, List
+from typing import List, Optional
 
 from farlog import get_logger
 from funworker import BaseConsumer, BaseProcessor, BaseProducer, Pipeline
 
-from funmirror.sync.mirror import MirrorContext, MirrorResult, mirror_one
+from funmirror.sync.platforms.base import RepoRef
+from funmirror.sync.repo_sync import SyncContext, SyncResult, sync_repo
 
 logger = get_logger("funmirror")
 
 
 class RepoProducer(BaseProducer):
-    def __init__(self, *args, repos: List[Dict], **kwargs):
+    def __init__(self, *args, repos: List[RepoRef], **kwargs):
         super().__init__(*args, **kwargs)
         self._iter = iter(repos)
 
@@ -19,12 +21,14 @@ class RepoProducer(BaseProducer):
         return next(self._iter)
 
 
-class MirrorProcessor(BaseProcessor):
-    def __init__(self, ctx: MirrorContext):
+class SyncProcessor(BaseProcessor):
+    def __init__(self, src_org: str, dst_org: str, ctx: SyncContext):
+        self.src_org = src_org
+        self.dst_org = dst_org
         self.ctx = ctx
 
-    def process(self, repo: Dict) -> MirrorResult:
-        return mirror_one(repo, self.ctx)
+    def process(self, repo: RepoRef) -> SyncResult:
+        return sync_repo(repo, self.src_org, self.dst_org, self.ctx)
 
 
 class ResultConsumer(BaseConsumer):
@@ -36,7 +40,7 @@ class ResultConsumer(BaseConsumer):
         self.skipped: List[str] = []
         self.failed: List[str] = []
 
-    def consume(self, result: MirrorResult) -> None:
+    def consume(self, result: SyncResult) -> None:
         self.done += 1
         detail = f" ({result.detail})" if result.detail else ""
         logger.info(
@@ -50,13 +54,27 @@ class ResultConsumer(BaseConsumer):
         bucket[result.status].append(result.repo)
 
 
-def run_mirror(
-    repos: List[Dict], ctx: MirrorContext, *, num_workers: int = 8
+def sync_org(
+    ctx: SyncContext,
+    src_org: str,
+    dst_org: str,
+    *,
+    repo_names: Optional[List[str]] = None,
+    num_workers: int = 8,
 ) -> ResultConsumer:
-    """Mirror `repos` in parallel and return the consumer holding the final tallies."""
+    """Sync every repo in src_org to dst_org in parallel (or just `repo_names`)."""
+    repos = (
+        [
+            RepoRef(name, ctx.src.default_branch(src_org, name) or "master")
+            for name in repo_names
+        ]
+        if repo_names
+        else ctx.src.list_repos(src_org)
+    )
+
     pipeline = Pipeline.build(
         producer_cls=RepoProducer,
-        processor=lambda: MirrorProcessor(ctx),
+        processor=lambda: SyncProcessor(src_org, dst_org, ctx),
         consumer_cls=ResultConsumer,
         num_workers=num_workers,
         producer_kwargs={"repos": repos},
