@@ -1,5 +1,6 @@
 """GitHub / Gitee REST API helpers used by funmirror."""
 
+import threading
 import time
 from typing import Dict, List, Optional
 
@@ -17,6 +18,28 @@ _session = requests.Session()
 
 def _github_headers(token: str) -> Dict[str, str]:
     return {"Authorization": f"token {token}"} if token else {}
+
+
+# Gitee fronts api.gitee.com with a WAF that blocks bursts of concurrent
+# requests from the same IP as a security risk (403, even though the token
+# itself is fine). Serialize all Gitee REST calls with a minimum gap between
+# them so N parallel workers don't all hit the API in the same instant --
+# clone/push over SSH is unaffected and stays fully parallel.
+_gitee_lock = threading.Lock()
+_gitee_min_interval = 0.5
+_gitee_last_call = 0.0
+
+
+def _gitee_request(method: str, url: str, **kwargs):
+    global _gitee_last_call
+    with _gitee_lock:
+        wait = _gitee_min_interval - (time.monotonic() - _gitee_last_call)
+        if wait > 0:
+            time.sleep(wait)
+        try:
+            return _session.request(method, url, timeout=30, **kwargs)
+        finally:
+            _gitee_last_call = time.monotonic()
 
 
 def list_github_repos(org: str, token: str = "", per_page: int = 100) -> List[Dict]:
@@ -69,8 +92,8 @@ class GiteeRepoExistsError(RuntimeError):
 
 
 def gitee_repo_exists(org: str, repo: str, token: str) -> bool:
-    resp = _session.get(
-        f"{GITEE_API}/repos/{org}/{repo}", params={"access_token": token}, timeout=30
+    resp = _gitee_request(
+        "GET", f"{GITEE_API}/repos/{org}/{repo}", params={"access_token": token}
     )
     if resp.status_code == 200:
         return True
@@ -85,10 +108,10 @@ def gitee_repo_exists(org: str, repo: str, token: str) -> bool:
 
 
 def gitee_branch_sha(org: str, repo: str, branch: str, token: str) -> Optional[str]:
-    resp = _session.get(
+    resp = _gitee_request(
+        "GET",
         f"{GITEE_API}/repos/{org}/{repo}/branches/{branch}",
         params={"access_token": token},
-        timeout=30,
     )
     if resp.status_code != 200:
         return None
@@ -96,10 +119,10 @@ def gitee_branch_sha(org: str, repo: str, branch: str, token: str) -> Optional[s
 
 
 def gitee_create_repo(org: str, repo: str, token: str) -> None:
-    resp = _session.post(
+    resp = _gitee_request(
+        "POST",
         f"{GITEE_API}/orgs/{org}/repos",
         data={"name": repo, "access_token": token},
-        timeout=30,
     )
     if resp.status_code == 201:
         # Gitee needs a moment before the new repo is ready to receive a push.
