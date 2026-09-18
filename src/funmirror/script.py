@@ -1,4 +1,4 @@
-"""funmirror CLI: mirror a GitHub org to a Gitee org."""
+"""funmirror CLI: mirror repos between two hosting platforms."""
 
 import argparse
 import os
@@ -7,9 +7,11 @@ from typing import List
 
 from farlog import get_logger
 
-from funmirror.sync import GitHubPlatform, GiteePlatform, SyncContext, sync_org
+from funmirror.sync import SyncContext, make_platform, sync_org
 
 logger = get_logger("funmirror")
+
+PLATFORMS = ["github", "gitee", "gitlab", "gitcode"]
 
 
 def _split_names(value: str) -> List[str]:
@@ -17,14 +19,24 @@ def _split_names(value: str) -> List[str]:
 
 
 def _mirror(args: argparse.Namespace) -> int:
-    src = GitHubPlatform(token=args.github_token)
-    dst = GiteePlatform(token=args.gitee_token, ssh_key_file=args.gitee_key_file)
+    src = make_platform(
+        args.src_platform,
+        token=args.src_token,
+        key_file=args.src_key_file,
+        endpoint=args.src_endpoint,
+    )
+    dst = make_platform(
+        args.dst_platform,
+        token=args.dst_token,
+        key_file=args.dst_key_file,
+        endpoint=args.dst_endpoint,
+    )
     ctx = SyncContext(src=src, dst=dst, force=args.force)
 
     consumer = sync_org(
         ctx,
-        args.github_org,
-        args.gitee_org,
+        args.src_org,
+        args.dst_org,
         repo_names=_split_names(args.repo_names) or None,
         num_workers=args.workers,
     )
@@ -57,18 +69,31 @@ def _mirror(args: argparse.Namespace) -> int:
 
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        prog="funmirror", description="Mirror GitHub org repos to Gitee"
+        prog="funmirror", description="Mirror repos between two hosting platforms"
     )
     commands = parser.add_subparsers(dest="command", required=True)
 
     mirror = commands.add_parser(
-        "mirror", help="mirror a GitHub org's repos to a Gitee org"
+        "mirror", help="mirror a source org's repos to a destination org"
     )
-    mirror.add_argument("--github-org", required=True)
-    mirror.add_argument("--gitee-org", required=True)
-    mirror.add_argument("--gitee-token", required=True)
-    mirror.add_argument("--gitee-key-file", required=True)
-    mirror.add_argument("--github-token", default="")
+    mirror.add_argument("--src-platform", required=True, choices=PLATFORMS)
+    mirror.add_argument("--dst-platform", required=True, choices=PLATFORMS)
+    mirror.add_argument("--src-org", required=True)
+    mirror.add_argument("--dst-org", required=True)
+    mirror.add_argument("--src-token", default="")
+    mirror.add_argument("--dst-token", default="")
+    mirror.add_argument(
+        "--src-key-file", default="", help="SSH key file, only required for gitee"
+    )
+    mirror.add_argument(
+        "--dst-key-file", default="", help="SSH key file, only required for gitee"
+    )
+    mirror.add_argument(
+        "--src-endpoint", default="", help="self-hosted endpoint, only used for gitlab"
+    )
+    mirror.add_argument(
+        "--dst-endpoint", default="", help="self-hosted endpoint, only used for gitlab"
+    )
     mirror.add_argument(
         "--repo-names", default="", help="comma-separated; empty means all repos"
     )
