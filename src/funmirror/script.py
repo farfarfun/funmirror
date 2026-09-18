@@ -77,16 +77,22 @@ def _mirror(args: argparse.Namespace) -> int:
 
 
 def _parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(prog="funmirror", description="Mirror GitHub org repos to Gitee")
+    parser = argparse.ArgumentParser(
+        prog="funmirror", description="Mirror GitHub org repos to Gitee"
+    )
     commands = parser.add_subparsers(dest="command", required=True)
 
-    mirror = commands.add_parser("mirror", help="mirror a GitHub org's repos to a Gitee org")
+    mirror = commands.add_parser(
+        "mirror", help="mirror a GitHub org's repos to a Gitee org"
+    )
     mirror.add_argument("--github-org", required=True)
     mirror.add_argument("--gitee-org", required=True)
     mirror.add_argument("--gitee-token", required=True)
     mirror.add_argument("--gitee-key-file", required=True)
     mirror.add_argument("--github-token", default="")
-    mirror.add_argument("--repo-names", default="", help="comma-separated; empty means all repos")
+    mirror.add_argument(
+        "--repo-names", default="", help="comma-separated; empty means all repos"
+    )
     mirror.add_argument("--workers", type=int, default=8)
     mirror.add_argument("--force", dest="force", action="store_true", default=True)
     mirror.add_argument("--no-force", dest="force", action="store_false")

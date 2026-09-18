@@ -51,7 +51,9 @@ def github_default_branch(org: str, repo: str, token: str = "") -> Optional[str]
     return resp.json().get("default_branch")
 
 
-def github_branch_sha(org: str, repo: str, branch: str, token: str = "") -> Optional[str]:
+def github_branch_sha(
+    org: str, repo: str, branch: str, token: str = ""
+) -> Optional[str]:
     resp = _session.get(
         f"{GITHUB_API}/repos/{org}/{repo}/branches/{branch}",
         headers=_github_headers(token),

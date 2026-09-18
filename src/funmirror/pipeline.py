@@ -39,12 +39,20 @@ class ResultConsumer(BaseConsumer):
     def consume(self, result: MirrorResult) -> None:
         self.done += 1
         detail = f" ({result.detail})" if result.detail else ""
-        logger.info(f"[{self.done}/{self.total}] {result.repo}: {result.status}{detail}")
-        bucket = {"mirrored": self.mirrored, "skipped": self.skipped, "failed": self.failed}
+        logger.info(
+            f"[{self.done}/{self.total}] {result.repo}: {result.status}{detail}"
+        )
+        bucket = {
+            "mirrored": self.mirrored,
+            "skipped": self.skipped,
+            "failed": self.failed,
+        }
         bucket[result.status].append(result.repo)
 
 
-def run_mirror(repos: List[Dict], ctx: MirrorContext, *, num_workers: int = 8) -> ResultConsumer:
+def run_mirror(
+    repos: List[Dict], ctx: MirrorContext, *, num_workers: int = 8
+) -> ResultConsumer:
     """Mirror `repos` in parallel and return the consumer holding the final tallies."""
     pipeline = Pipeline.build(
         producer_cls=RepoProducer,
