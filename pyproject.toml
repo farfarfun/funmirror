@@ -1,0 +1,38 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "funmirror"
+version = "0.1.0"
+description = "Mirror GitHub organization repos to Gitee, in parallel, skipping repos that are already up to date"
+readme = "README.md"
+requires-python = ">=3.9"
+license = { text = "MIT" }
+authors = [
+    { name = "farfarfun", email = "farfarfun@qq.com" },
+    { name = "牛哥", email = "niuliangtao@qq.com" },
+]
+maintainers = [
+    { name = "farfarfun", email = "farfarfun@qq.com" },
+    { name = "牛哥", email = "niuliangtao@qq.com" },
+]
+dependencies = [
+    "requests>=2.32.0",
+    "farlog>=1.1.8",
+    "funworker>=0.1.4",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0.0"]
+
+[project.urls]
+Organization = "https://github.com/farfarfun"
+Repository = "https://github.com/farfarfun/funmirror"
+Releases = "https://github.com/farfarfun/funmirror/releases"
+
+[project.scripts]
+funmirror = "funmirror.script:funmirror"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/funmirror"]
