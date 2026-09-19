@@ -19,20 +19,39 @@ def _split_names(value: str) -> List[str]:
     return [n.strip() for n in value.split(",") if n.strip()]
 
 
-def _load_state(path: str) -> Dict[str, str]:
+def _state_namespace(args: argparse.Namespace) -> str:
+    """A state file may be shared across multiple src/dst platform pairs (e.g.
+    mirroring the same org to both Gitee and GitLab); namespace each pair's
+    entries so one pair's progress can never be mistaken for another's."""
+    return f"{args.src_platform}/{args.src_org}::{args.dst_platform}/{args.dst_org}"
+
+
+def _load_state(path: str, namespace: str) -> Dict[str, Dict[str, str]]:
     if not path or not os.path.exists(path):
         return {}
     with open(path) as f:
-        return json.load(f)
+        data = json.load(f)
+    ns = data.get(namespace, {})
+    return ns if isinstance(ns, dict) else {}
 
 
-def _save_state(path: str, state: Dict[str, str], updates: Dict[str, str]) -> None:
+def _save_state(
+    path: str, namespace: str, updates: Dict[str, Dict[str, str]]
+) -> None:
     if not path:
         return
-    merged = {**state, **updates}
+    data: Dict[str, Dict[str, Dict[str, str]]] = {}
+    if os.path.exists(path):
+        with open(path) as f:
+            data = json.load(f)
+    ns = data.get(namespace)
+    if not isinstance(ns, dict):
+        ns = {}
+    ns.update(updates)
+    data[namespace] = ns
     os.makedirs(os.path.dirname(os.path.abspath(path)), exist_ok=True)
     with open(path, "w") as f:
-        json.dump(merged, f, indent=2, sort_keys=True)
+        json.dump(data, f, indent=2, sort_keys=True)
         f.write("\n")
 
 
@@ -50,7 +69,8 @@ def _mirror(args: argparse.Namespace) -> int:
         endpoint=args.dst_endpoint,
     )
     ctx = SyncContext(src=src, dst=dst, force=args.force)
-    state = _load_state(args.state_file)
+    namespace = _state_namespace(args)
+    state = _load_state(args.state_file, namespace)
 
     consumer = sync_org(
         ctx,
@@ -58,10 +78,11 @@ def _mirror(args: argparse.Namespace) -> int:
         args.dst_org,
         repo_names=_split_names(args.repo_names) or None,
         num_workers=args.workers,
+        num_detect_workers=args.detect_workers,
         state=state,
         incremental=args.incremental,
     )
-    _save_state(args.state_file, state, consumer.state_updates)
+    _save_state(args.state_file, namespace, consumer.state_updates)
 
     total = consumer.total
     summary = (
@@ -120,15 +141,28 @@ def _parser() -> argparse.ArgumentParser:
         "--repo-names", default="", help="comma-separated; empty means all repos"
     )
     mirror.add_argument("--workers", type=int, default=8)
+    mirror.add_argument(
+        "--detect-workers",
+        type=int,
+        default=None,
+        help=(
+            "concurrency for the read-only commit-id detection phase (runs before "
+            "--workers' clone+push phase); defaults to max(workers*4, 16). Keep "
+            "--workers low to protect a rate-limited destination while detection "
+            "still runs fast, since it never touches git."
+        ),
+    )
     mirror.add_argument("--force", dest="force", action="store_true", default=True)
     mirror.add_argument("--no-force", dest="force", action="store_false")
     mirror.add_argument(
         "--state-file",
         default="",
         help=(
-            "path to a JSON file mapping repo name -> last-synced src branch sha; "
-            "read at start and rewritten at the end with every processed repo's "
-            "confirmed sha. Empty disables state tracking."
+            "path to a JSON file (namespaced by src/dst platform+org, so one file "
+            "can safely be shared across multiple pairs) mapping repo name -> "
+            "{src_sha, dst_sha} last confirmed in sync; read at start and "
+            "rewritten at the end with every processed repo's confirmed shas. "
+            "Empty disables state tracking."
         ),
     )
     mirror.add_argument(
@@ -136,10 +170,15 @@ def _parser() -> argparse.ArgumentParser:
         action="store_true",
         default=False,
         help=(
-            "skip repos whose current src sha still matches --state-file, without "
-            "ever querying the destination platform. Without this flag, every repo "
-            "is checked against the destination as usual (full sync), and the "
-            "state file (if given) is still refreshed from the confirmed results."
+            "only query the src platform's commit id; a repo whose src sha still "
+            "matches --state-file is skipped entirely (dst is never queried). A "
+            "repo whose src sha changed is sent straight to sync without a dst "
+            "check either, trusting --state-file's bookkeeping that dst was in "
+            "sync as of the last recorded src sha. Without this flag (full sync), "
+            "every repo's dst is queried for real and compared directly against "
+            "src, ignoring --state-file for the decision (though it's still "
+            "refreshed from the confirmed results) -- use this periodically to "
+            "self-heal any drift."
         ),
     )
     mirror.set_defaults(handler=_mirror)

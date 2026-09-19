@@ -29,6 +29,23 @@ class SyncResult:
     status: str  # "mirrored" | "skipped" | "failed"
     detail: str = ""
     src_sha: Optional[str] = None  # known-good src sha, for state-file bookkeeping
+    dst_sha: Optional[str] = None  # known-good dst sha, for state-file bookkeeping
+
+
+@dataclass
+class DetectResult:
+    """Phase-1 (detect) outcome for one repo.
+
+    `outcome == "terminal"`: nothing more to do, `result` is final (skipped or
+    failed). `outcome == "sync"`: the repo needs a real clone+push in phase 2,
+    carrying the already-confirmed `src_sha` forward so phase 2 doesn't have
+    to re-query it.
+    """
+
+    repo: RepoRef
+    outcome: str  # "terminal" | "sync"
+    result: Optional[SyncResult] = None
+    src_sha: Optional[str] = None
 
 
 def _run(
@@ -52,34 +69,70 @@ def _retry(fn, *args, attempts: int = 3, delay: float = 5, **kwargs):
     raise last_exc
 
 
-def sync_repo(
+def detect_repo(
     repo: RepoRef,
     src_org: str,
     dst_org: str,
     ctx: SyncContext,
     *,
-    state_sha: Optional[str] = None,
+    state_entry: Optional[Dict[str, str]] = None,
     incremental: bool = False,
-) -> SyncResult:
+) -> DetectResult:
+    """Phase 1: cheap, read-only check for whether `repo` needs a real sync.
+
+    Incremental: only the src commit sha is ever queried. If it still matches
+    `state_entry["src_sha"]`, the repo is trusted unchanged (dst is never
+    touched). Otherwise it's handed straight to phase 2 -- no dst read here
+    either, since a changed src always implies a stale dst under this
+    scheme's bookkeeping.
+
+    Full (non-incremental): both src and dst commit shas are queried (state
+    is ignored for the decision, though phase 2's confirmed results still
+    refresh it), and only repos where they differ need a real sync.
+    """
     name = repo.name
     branch = repo.default_branch or "master"
 
     try:
         src_sha = ctx.src.branch_sha(src_org, name, branch)
 
-        if incremental and src_sha and src_sha == state_sha:
-            return SyncResult(
-                name, "skipped", "unchanged since last sync (incremental)", src_sha
-            )
+        if incremental:
+            if state_entry and src_sha and src_sha == state_entry.get("src_sha"):
+                return DetectResult(
+                    repo,
+                    "terminal",
+                    SyncResult(
+                        name,
+                        "skipped",
+                        "unchanged since last sync (incremental)",
+                        src_sha,
+                        state_entry.get("dst_sha"),
+                    ),
+                )
+            return DetectResult(repo, "sync", src_sha=src_sha)
 
-        ctx.dst.ensure_repo(dst_org, name)
         dst_sha = ctx.dst.branch_sha(dst_org, name, branch)
-
         if src_sha and src_sha == dst_sha:
-            return SyncResult(name, "skipped", "up to date", src_sha)
+            return DetectResult(
+                repo, "terminal", SyncResult(name, "skipped", "up to date", src_sha, dst_sha)
+            )
+        return DetectResult(repo, "sync", src_sha=src_sha)
+    except Exception as exc:  # noqa: BLE001
+        logger.error(f"{name}: detect failed: {exc}")
+        return DetectResult(repo, "terminal", SyncResult(name, "failed", str(exc)))
 
+
+def sync_repo(
+    repo: RepoRef, src_org: str, dst_org: str, ctx: SyncContext, src_sha: Optional[str]
+) -> SyncResult:
+    """Phase 2: make dst/repo exist, then clone+push if it actually needs it."""
+    name = repo.name
+    try:
+        ctx.dst.ensure_repo(dst_org, name)
         result = _clone_and_push(name, src_org, dst_org, ctx)
         result.src_sha = src_sha
+        if result.status == "mirrored":
+            result.dst_sha = src_sha
         return result
     except Exception as exc:  # noqa: BLE001
         logger.error(f"{name}: sync failed: {exc}")

@@ -9,7 +9,7 @@ from funmirror.sync.platforms import (
     RepoRef,
     make_platform,
 )
-from funmirror.sync.repo_sync import SyncContext, SyncResult, sync_repo
+from funmirror.sync.repo_sync import DetectResult, SyncContext, SyncResult, detect_repo, sync_repo
 from funmirror.sync.org_sync import sync_org
 
 __all__ = [
@@ -22,6 +22,8 @@ __all__ = [
     "make_platform",
     "SyncContext",
     "SyncResult",
+    "DetectResult",
+    "detect_repo",
     "sync_repo",
     "sync_org",
 ]
