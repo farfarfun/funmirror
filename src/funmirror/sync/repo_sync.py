@@ -28,6 +28,7 @@ class SyncResult:
     repo: str
     status: str  # "mirrored" | "skipped" | "failed"
     detail: str = ""
+    src_sha: Optional[str] = None  # known-good src sha, for state-file bookkeeping
 
 
 def _run(
@@ -52,20 +53,34 @@ def _retry(fn, *args, attempts: int = 3, delay: float = 5, **kwargs):
 
 
 def sync_repo(
-    repo: RepoRef, src_org: str, dst_org: str, ctx: SyncContext
+    repo: RepoRef,
+    src_org: str,
+    dst_org: str,
+    ctx: SyncContext,
+    *,
+    state_sha: Optional[str] = None,
+    incremental: bool = False,
 ) -> SyncResult:
     name = repo.name
     branch = repo.default_branch or "master"
 
     try:
         src_sha = ctx.src.branch_sha(src_org, name, branch)
+
+        if incremental and src_sha and src_sha == state_sha:
+            return SyncResult(
+                name, "skipped", "unchanged since last sync (incremental)", src_sha
+            )
+
         ctx.dst.ensure_repo(dst_org, name)
         dst_sha = ctx.dst.branch_sha(dst_org, name, branch)
 
         if src_sha and src_sha == dst_sha:
-            return SyncResult(name, "skipped", "up to date")
+            return SyncResult(name, "skipped", "up to date", src_sha)
 
-        return _clone_and_push(name, src_org, dst_org, ctx)
+        result = _clone_and_push(name, src_org, dst_org, ctx)
+        result.src_sha = src_sha
+        return result
     except Exception as exc:  # noqa: BLE001
         logger.error(f"{name}: sync failed: {exc}")
         return SyncResult(name, "failed", str(exc))

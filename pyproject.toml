@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "funmirror"
-version = "0.2.0"
+version = "0.3.0"
 description = "Mirror repos between hosting platforms (GitHub/Gitee/GitLab/GitCode), in parallel, skipping repos that are already up to date"
 readme = "README.md"
 requires-python = ">=3.9"

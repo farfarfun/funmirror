@@ -22,7 +22,7 @@ things it doesn't have:
 ## Install
 
 ```bash
-pip install "git+https://github.com/farfarfun/funmirror.git@v0.2.0"
+pip install "git+https://github.com/farfarfun/funmirror.git@v0.3.0"
 ```
 
 ## Usage
@@ -58,6 +58,38 @@ Exit code is `1` if any repo failed to mirror; a one-line summary
 4. Otherwise `git clone` from the source, then `git push` (force by default)
    `refs/remotes/origin/*:refs/heads/*` plus tags to the destination, with
    retries.
+
+## Incremental sync via a state file
+
+`--state-file PATH` persists a JSON `{repo: last-synced-src-sha}` map across
+runs. Combined with `--incremental`, a repo whose current source sha still
+matches the state file is skipped **without ever querying the destination
+platform** — useful when the destination (e.g. Gitee) rate-limits or
+throttles API calls and most repos don't change between runs.
+
+```bash
+# hourly, cheap: most repos short-circuit off local state, no dst calls
+funmirror mirror --src-platform github --dst-platform gitee \
+  --src-org my-org --dst-org my-org --dst-token "$GITEE_TOKEN" \
+  --dst-key-file ~/.ssh/gitee_deploy_key --state-file .mirror-state/gitee.json \
+  --incremental
+
+# daily, thorough: ignores the state file for skip decisions (always checks
+# the destination for real), then rewrites the state file from the confirmed
+# results — self-heals any drift an incremental run might have left behind
+funmirror mirror --src-platform github --dst-platform gitee \
+  --src-org my-org --dst-org my-org --dst-token "$GITEE_TOKEN" \
+  --dst-key-file ~/.ssh/gitee_deploy_key --state-file .mirror-state/gitee.json \
+  --workers 2
+```
+
+The state file is only ever updated with a repo's src sha once that sha is
+*confirmed* to match the destination (either via `--incremental`'s own check,
+or after a successful push) — a repo that fails to sync leaves its previous
+state entry untouched, so it's retried for real on the next run instead of
+being incorrectly marked up to date. `funmirror` only reads/writes the file
+locally; persisting it across CI runs (e.g. committing it back to a repo) is
+the caller's responsibility.
 
 ## Development
 

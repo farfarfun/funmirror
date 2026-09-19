@@ -1,9 +1,10 @@
 """funmirror CLI: mirror repos between two hosting platforms."""
 
 import argparse
+import json
 import os
 import sys
-from typing import List
+from typing import Dict, List
 
 from farlog import get_logger
 
@@ -16,6 +17,23 @@ PLATFORMS = ["github", "gitee", "gitlab", "gitcode"]
 
 def _split_names(value: str) -> List[str]:
     return [n.strip() for n in value.split(",") if n.strip()]
+
+
+def _load_state(path: str) -> Dict[str, str]:
+    if not path or not os.path.exists(path):
+        return {}
+    with open(path) as f:
+        return json.load(f)
+
+
+def _save_state(path: str, state: Dict[str, str], updates: Dict[str, str]) -> None:
+    if not path:
+        return
+    merged = {**state, **updates}
+    os.makedirs(os.path.dirname(os.path.abspath(path)), exist_ok=True)
+    with open(path, "w") as f:
+        json.dump(merged, f, indent=2, sort_keys=True)
+        f.write("\n")
 
 
 def _mirror(args: argparse.Namespace) -> int:
@@ -32,6 +50,7 @@ def _mirror(args: argparse.Namespace) -> int:
         endpoint=args.dst_endpoint,
     )
     ctx = SyncContext(src=src, dst=dst, force=args.force)
+    state = _load_state(args.state_file)
 
     consumer = sync_org(
         ctx,
@@ -39,7 +58,10 @@ def _mirror(args: argparse.Namespace) -> int:
         args.dst_org,
         repo_names=_split_names(args.repo_names) or None,
         num_workers=args.workers,
+        state=state,
+        incremental=args.incremental,
     )
+    _save_state(args.state_file, state, consumer.state_updates)
 
     total = consumer.total
     summary = (
@@ -100,6 +122,26 @@ def _parser() -> argparse.ArgumentParser:
     mirror.add_argument("--workers", type=int, default=8)
     mirror.add_argument("--force", dest="force", action="store_true", default=True)
     mirror.add_argument("--no-force", dest="force", action="store_false")
+    mirror.add_argument(
+        "--state-file",
+        default="",
+        help=(
+            "path to a JSON file mapping repo name -> last-synced src branch sha; "
+            "read at start and rewritten at the end with every processed repo's "
+            "confirmed sha. Empty disables state tracking."
+        ),
+    )
+    mirror.add_argument(
+        "--incremental",
+        action="store_true",
+        default=False,
+        help=(
+            "skip repos whose current src sha still matches --state-file, without "
+            "ever querying the destination platform. Without this flag, every repo "
+            "is checked against the destination as usual (full sync), and the "
+            "state file (if given) is still refreshed from the confirmed results."
+        ),
+    )
     mirror.set_defaults(handler=_mirror)
 
     return parser
