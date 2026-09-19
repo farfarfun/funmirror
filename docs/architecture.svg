@@ -1,0 +1,184 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1020 752" role="img" lang="zh-CN" aria-labelledby="archify-diagram-title archify-diagram-description" data-preset="classic" data-quality-profile="showcase">
+        <title id="archify-diagram-title">funmirror / mirror-repo: cross-platform repo mirroring pipeline</title>
+        <desc id="archify-diagram-description">由 Archify 生成的架构图。</desc>
+        <!-- Definitions -->
+        <defs>
+          <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+            <polygon points="0 0, 10 3.5, 0 7" class="m-default" />
+          </marker>
+          <marker id="arrowhead-emphasis" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+            <polygon points="0 0, 10 3.5, 0 7" class="m-emphasis" />
+          </marker>
+          <marker id="arrowhead-security" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+            <polygon points="0 0, 10 3.5, 0 7" class="m-security" />
+          </marker>
+          <marker id="arrowhead-dashed" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+            <polygon points="0 0, 10 3.5, 0 7" class="m-dashed" />
+          </marker>
+          <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
+            <path d="M 40 0 L 0 0 0 40" class="c-grid" stroke-width="0.5"/>
+          </pattern>
+        </defs>
+
+        <!-- Background Grid -->
+        <rect width="100%" height="100%" fill="url(#grid)" />
+
+        <!-- Boundaries (behind everything) -->
+
+
+        <!-- Connection paths (before components for correct z-order) -->
+        <path data-edge-from="trigger" data-edge-to="mirrorRepo" data-edge-label="触发" data-edge-key="0" data-edge-id="trigger-to-mirrorrepo" data-composition-points="190,132;300,132" d="M 190 132 L 300 132" class="a-emphasis" stroke-width="1.8" marker-end="url(#arrowhead-emphasis)"/>
+        <path data-edge-from="mirrorRepo" data-edge-to="cli" data-edge-label="调用" data-edge-key="1" data-edge-id="mirrorrepo-to-cli" data-composition-points="440,132;560,132" d="M 440 132 L 560 132" class="a-default" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+        <path data-edge-from="cli" data-edge-to="detect" data-edge-label="分发" data-edge-key="2" data-edge-id="cli-to-detect" data-composition-points="700,132;820,132" d="M 700 132 L 820 132" class="a-default" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+        <path data-edge-from="cli" data-edge-to="state" data-edge-label="读写" data-edge-key="3" data-edge-id="cli-to-state" data-composition-points="630,164;630,380" d="M 630 164 L 630 380" class="a-default" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+        <path data-edge-from="detect" data-edge-to="sync" data-edge-label="待同步" data-edge-key="4" data-edge-id="detect-to-sync" data-composition-points="900,164;900,380" d="M 900 164 L 900 380" class="a-default" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+        <path data-edge-from="sync" data-edge-to="src" data-edge-label="clone" data-edge-key="5" data-edge-id="sync-to-src" data-composition-points="820,412;796,412;796,652;460,652" d="M 820 412 L 804 412 Q 796 412 796 420 L 796 644 Q 796 652 788 652 L 460 652" class="a-default" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+        <path data-edge-from="sync" data-edge-to="dst" data-edge-label="push" data-edge-key="6" data-edge-id="sync-to-dst" data-composition-points="900,444;900,620" d="M 900 444 L 900 620" class="a-emphasis" stroke-width="1.8" marker-end="url(#arrowhead-emphasis)"/>
+
+        <!-- Components -->
+        <g id="node-trigger" data-node-id="trigger" data-node-label="action-daily 工作流" tabindex="0" role="button" aria-label="聚焦action-daily 工作流，cron / push / dispatch, 架构组件" aria-pressed="false" data-node-kind="external" data-node-sublabel="cron / push / dispatch" data-node-context="架构组件">
+          <title>action-daily 工作流 · cron / push / dispatch · 架构组件</title>
+          <rect x="40" y="100" width="150" height="64" rx="6" class="c-mask"/>
+          <rect x="40" y="100" width="150" height="64" rx="6" class="c-external" stroke-width="1.5"/>
+          <g aria-hidden="true" data-semantic-sigil="external" class="semantic-sigil s-external" transform="translate(46 106) scale(0.6875)">
+            <rect x="2.5" y="5" width="8.5" height="8" rx="1.5"/>
+            <path d="M8 2.5h5.5V8M13.5 2.5 7.5 8.5"/>
+          </g>
+          <text data-node-label="" data-detail-anchor="" x="115" y="130" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">action-daily 工作流</text>
+        <text data-detail="context" x="115" y="146" class="t-muted" font-size="9" text-anchor="middle">cron / push / dispatch</text>
+        </g>
+
+        <g id="node-mirrorRepo" data-node-id="mirrorRepo" data-node-label="mirror-repo Action" tabindex="0" role="button" aria-label="聚焦mirror-repo Action，action.yml, 架构组件" aria-pressed="false" data-node-kind="backend" data-node-sublabel="action.yml" data-node-context="架构组件">
+          <title>mirror-repo Action · action.yml · 架构组件</title>
+          <rect x="300" y="100" width="140" height="64" rx="6" class="c-mask"/>
+          <rect x="300" y="100" width="140" height="64" rx="6" class="c-backend" stroke-width="1.5"/>
+          <g aria-hidden="true" data-semantic-sigil="backend" class="semantic-sigil s-backend" transform="translate(306 106) scale(0.6875)">
+            <path d="M6 3 3 8l3 5M10 3l3 5-3 5"/>
+          </g>
+          <text data-node-label="" data-detail-anchor="" x="370" y="130" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">mirror-repo Action</text>
+        <text data-detail="context" x="370" y="146" class="t-muted" font-size="9" text-anchor="middle">action.yml</text>
+        </g>
+
+        <g id="node-cli" data-node-id="cli" data-node-label="funmirror CLI" tabindex="0" role="button" aria-label="聚焦funmirror CLI，pip install &amp; run, 架构组件" aria-pressed="false" data-node-kind="backend" data-node-sublabel="pip install &amp; run" data-node-context="架构组件">
+          <title>funmirror CLI · pip install &amp; run · 架构组件</title>
+          <rect x="560" y="100" width="140" height="64" rx="6" class="c-mask"/>
+          <rect x="560" y="100" width="140" height="64" rx="6" class="c-backend" stroke-width="1.5"/>
+          <g aria-hidden="true" data-semantic-sigil="backend" class="semantic-sigil s-backend" transform="translate(566 106) scale(0.6875)">
+            <path d="M6 3 3 8l3 5M10 3l3 5-3 5"/>
+          </g>
+          <text data-node-label="" data-detail-anchor="" x="630" y="130" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">funmirror CLI</text>
+        <text data-detail="context" x="630" y="146" class="t-muted" font-size="9" text-anchor="middle">pip install &amp; run</text>
+        </g>
+
+        <g id="node-detect" data-node-id="detect" data-node-label="Detect 阶段" tabindex="0" role="button" aria-label="聚焦Detect 阶段，--detect-workers 高并发, 架构组件" aria-pressed="false" data-node-kind="backend" data-node-sublabel="--detect-workers 高并发" data-node-context="架构组件">
+          <title>Detect 阶段 · --detect-workers 高并发 · 架构组件</title>
+          <rect x="820" y="100" width="160" height="64" rx="6" class="c-mask"/>
+          <rect x="820" y="100" width="160" height="64" rx="6" class="c-backend" stroke-width="1.5"/>
+          <g aria-hidden="true" data-semantic-sigil="backend" class="semantic-sigil s-backend" transform="translate(826 106) scale(0.6875)">
+            <path d="M6 3 3 8l3 5M10 3l3 5-3 5"/>
+          </g>
+          <text data-node-label="" data-detail-anchor="" x="900" y="130" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">Detect 阶段</text>
+        <text data-detail="context" x="900" y="146" class="t-muted" font-size="9" text-anchor="middle">--detect-workers 高并发</text>
+        </g>
+
+        <g id="node-state" data-node-id="state" data-node-label="状态文件" tabindex="0" role="button" aria-label="聚焦状态文件，.mirror-state/*.json, 架构组件" aria-pressed="false" data-node-kind="database" data-node-sublabel=".mirror-state/*.json" data-node-context="架构组件">
+          <title>状态文件 · .mirror-state/*.json · 架构组件</title>
+          <rect x="560" y="380" width="140" height="64" rx="6" class="c-mask"/>
+          <rect x="560" y="380" width="140" height="64" rx="6" class="c-database" stroke-width="1.5"/>
+          <g aria-hidden="true" data-semantic-sigil="database" class="semantic-sigil s-database" transform="translate(566 386) scale(0.6875)">
+            <ellipse cx="8" cy="4" rx="5" ry="2"/>
+            <path d="M3 4v8c0 1.1 2.2 2 5 2s5-.9 5-2V4M3 8c0 1.1 2.2 2 5 2s5-.9 5-2"/>
+          </g>
+          <text data-node-label="" data-detail-anchor="" x="630" y="410" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">状态文件</text>
+        <text data-detail="context" x="630" y="426" class="t-muted" font-size="9" text-anchor="middle">.mirror-state/*.json</text>
+        </g>
+
+        <g id="node-sync" data-node-id="sync" data-node-label="Sync 阶段" tabindex="0" role="button" aria-label="聚焦Sync 阶段，--workers 低并发, 架构组件" aria-pressed="false" data-node-kind="backend" data-node-sublabel="--workers 低并发" data-node-context="架构组件">
+          <title>Sync 阶段 · --workers 低并发 · 架构组件</title>
+          <rect x="820" y="380" width="160" height="64" rx="6" class="c-mask"/>
+          <rect x="820" y="380" width="160" height="64" rx="6" class="c-backend" stroke-width="1.5"/>
+          <g aria-hidden="true" data-semantic-sigil="backend" class="semantic-sigil s-backend" transform="translate(826 386) scale(0.6875)">
+            <path d="M6 3 3 8l3 5M10 3l3 5-3 5"/>
+          </g>
+          <text data-node-label="" data-detail-anchor="" x="900" y="410" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">Sync 阶段</text>
+        <text data-detail="context" x="900" y="426" class="t-muted" font-size="9" text-anchor="middle">--workers 低并发</text>
+        </g>
+
+        <g id="node-src" data-node-id="src" data-node-label="源平台" tabindex="0" role="button" aria-label="聚焦源平台，GitHub / Gitee / GitLab / GitCode, 架构组件" aria-pressed="false" data-node-kind="external" data-node-sublabel="GitHub / Gitee / GitLab / GitCode" data-node-context="架构组件">
+          <title>源平台 · GitHub / Gitee / GitLab / GitCode · 架构组件</title>
+          <rect x="300" y="620" width="160" height="64" rx="6" class="c-mask"/>
+          <rect x="300" y="620" width="160" height="64" rx="6" class="c-external" stroke-width="1.5"/>
+          <g aria-hidden="true" data-semantic-sigil="external" class="semantic-sigil s-external" transform="translate(306 626) scale(0.6875)">
+            <rect x="2.5" y="5" width="8.5" height="8" rx="1.5"/>
+            <path d="M8 2.5h5.5V8M13.5 2.5 7.5 8.5"/>
+          </g>
+          <text data-node-label="" data-detail-anchor="" x="380" y="650" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">源平台</text>
+        <text data-detail="context" x="380" y="666" class="t-muted" font-size="7.6" text-anchor="middle">GitHub / Gitee / GitLab / GitCode</text>
+        </g>
+
+        <g id="node-dst" data-node-id="dst" data-node-label="目的平台" tabindex="0" role="button" aria-label="聚焦目的平台，GitHub / Gitee / GitLab / GitCode, 架构组件" aria-pressed="false" data-node-kind="cloud" data-node-sublabel="GitHub / Gitee / GitLab / GitCode" data-node-context="架构组件">
+          <title>目的平台 · GitHub / Gitee / GitLab / GitCode · 架构组件</title>
+          <rect x="820" y="620" width="160" height="64" rx="6" class="c-mask"/>
+          <rect x="820" y="620" width="160" height="64" rx="6" class="c-cloud" stroke-width="1.5"/>
+          <g aria-hidden="true" data-semantic-sigil="cloud" class="semantic-sigil s-cloud" transform="translate(826 626) scale(0.6875)">
+            <path d="M4.3 12.5h7.3a2.4 2.4 0 0 0 .2-4.8 4 4 0 0 0-7.5-1.3A3.1 3.1 0 0 0 4.3 12.5Z"/>
+          </g>
+          <text data-node-label="" data-detail-anchor="" x="900" y="650" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">目的平台</text>
+        <text data-detail="context" x="900" y="666" class="t-muted" font-size="7.6" text-anchor="middle">GitHub / Gitee / GitLab / GitCode</text>
+        </g>
+
+        <!-- Connection labels -->
+        <g data-detail="context" data-edge-from="trigger" data-edge-to="mirrorRepo" data-edge-label="触发" data-edge-key="0" data-edge-id="trigger-to-mirrorrepo">
+          <rect x="230" y="112" width="30" height="14" rx="3" class="c-mask"/>
+          <text x="245" y="122" class="t-backend" font-size="8" text-anchor="middle">触发</text>
+        </g>
+        <g data-detail="context" data-edge-from="mirrorRepo" data-edge-to="cli" data-edge-label="调用" data-edge-key="1" data-edge-id="mirrorrepo-to-cli">
+          <rect x="485" y="112" width="30" height="14" rx="3" class="c-mask"/>
+          <text x="500" y="122" class="t-muted" font-size="8" text-anchor="middle">调用</text>
+        </g>
+        <g data-detail="context" data-edge-from="cli" data-edge-to="detect" data-edge-label="分发" data-edge-key="2" data-edge-id="cli-to-detect">
+          <rect x="745" y="112" width="30" height="14" rx="3" class="c-mask"/>
+          <text x="760" y="122" class="t-muted" font-size="8" text-anchor="middle">分发</text>
+        </g>
+        <g data-detail="context" data-edge-from="cli" data-edge-to="state" data-edge-label="读写" data-edge-key="3" data-edge-id="cli-to-state">
+          <rect x="615" y="168" width="30" height="14" rx="3" class="c-mask"/>
+          <text x="630" y="178" class="t-muted" font-size="8" text-anchor="middle">读写</text>
+        </g>
+        <g data-detail="context" data-edge-from="detect" data-edge-to="sync" data-edge-label="待同步" data-edge-key="4" data-edge-id="detect-to-sync">
+          <rect x="880.6" y="168" width="38.8" height="14" rx="3" class="c-mask"/>
+          <text x="900" y="178" class="t-muted" font-size="8" text-anchor="middle">待同步</text>
+        </g>
+        <g data-detail="context" data-edge-from="sync" data-edge-to="src" data-edge-label="clone" data-edge-key="5" data-edge-id="sync-to-src">
+          <rect x="779" y="512" width="34" height="14" rx="3" class="c-mask"/>
+          <text x="796" y="522" class="t-muted" font-size="8" text-anchor="middle">clone</text>
+        </g>
+        <g data-detail="context" data-edge-from="sync" data-edge-to="dst" data-edge-label="push" data-edge-key="6" data-edge-id="sync-to-dst">
+          <rect x="885" y="448" width="30" height="14" rx="3" class="c-mask"/>
+          <text x="900" y="458" class="t-backend" font-size="8" text-anchor="middle">push</text>
+        </g>
+
+        <!-- Boundary labels (foreground masks keep routes out of titles) -->
+
+
+        <!-- Legend -->
+        <g data-legend="" data-legend-bridge="">
+          <text x="40" y="716" class="t-primary" font-size="12" font-weight="650">图例</text>
+          <g data-legend-semantic-kind="backend" data-legend-kind="backend" data-legend-label="后端" data-legend-x="40" data-legend-baseline="736" data-legend-width="63">
+            <rect x="40" y="727" width="16" height="10" rx="2.5" class="c-backend" stroke-width="1"/>
+            <text x="62" y="736" class="t-muted" font-size="10" font-weight="500">后端</text>
+          </g>
+          <g data-legend-semantic-kind="database" data-legend-kind="database" data-legend-label="数据库" data-legend-x="125" data-legend-baseline="736" data-legend-width="73">
+            <rect x="125" y="727" width="16" height="10" rx="2.5" class="c-database" stroke-width="1"/>
+            <text x="147" y="736" class="t-muted" font-size="10" font-weight="500">数据库</text>
+          </g>
+          <g data-legend-semantic-kind="cloud" data-legend-kind="cloud" data-legend-label="云服务" data-legend-x="220" data-legend-baseline="736" data-legend-width="73">
+            <rect x="220" y="727" width="16" height="10" rx="2.5" class="c-cloud" stroke-width="1"/>
+            <text x="242" y="736" class="t-muted" font-size="10" font-weight="500">云服务</text>
+          </g>
+          <g data-legend-semantic-kind="external" data-legend-kind="external" data-legend-label="外部系统" data-legend-x="315" data-legend-baseline="736" data-legend-width="83">
+            <rect x="315" y="727" width="16" height="10" rx="2.5" class="c-external" stroke-width="1"/>
+            <text x="337" y="736" class="t-muted" font-size="10" font-weight="500">外部系统</text>
+          </g>
+        </g>
+      </svg>

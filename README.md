@@ -22,6 +22,16 @@ things it doesn't have:
   the source and destination default branch is compared; if they already
   match, the repo is skipped entirely.
 
+## Architecture
+
+<img src="docs/architecture.svg" alt="funmirror / mirror-repo pipeline architecture" width="100%">
+
+`action-daily` triggers `mirror-repo`, which installs and calls this CLI.
+The CLI dispatches a high-concurrency detect phase, then a low-concurrency
+sync phase against the source/destination platform; the state file is read
+and rewritten locally on every run, and persisting it across CI runs is the
+caller's job (see "Incremental sync via a state file" below).
+
 ## Install
 
 ```bash
