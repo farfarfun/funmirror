@@ -24,7 +24,7 @@ things it doesn't have:
 
 ## Architecture
 
-<img src="docs/architecture.svg" alt="funmirror / mirror-repo pipeline architecture" width="100%">
+<img src="docs/architecture.png" alt="funmirror / mirror-repo pipeline architecture" width="100%">
 
 `action-daily` triggers `mirror-repo`, which installs and calls this CLI.
 The CLI dispatches a high-concurrency detect phase, then a low-concurrency
