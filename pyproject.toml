@@ -13,6 +13,7 @@ dependencies = [
     "funworker>=0.0.1",
     "farlog>=1.1.8",
     "requests>=2.32.5",
+    "typer>=0.12.0",
 ]
 license-files = ["LICENSE"]
 

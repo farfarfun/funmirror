@@ -57,6 +57,8 @@ required when the corresponding platform is `gitee`. `--src-endpoint`/
 `--dst-endpoint` are only used for self-hosted GitLab instances.
 `--repo-names` is optional; if omitted, every repo in `--src-org` is
 mirrored (requires `--src-token` to list them).
+Run `funmirror --help` or `funmirror mirror --help` for the complete command
+reference.
 
 Exit code is `1` if any repo failed to mirror; a one-line summary
 (`Mirrored X, skipped Y, failed Z (total N)`) is printed and, if

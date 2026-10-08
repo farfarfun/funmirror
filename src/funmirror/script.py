@@ -1,11 +1,12 @@
 """funmirror CLI: mirror repos between two hosting platforms."""
 
-import argparse
+from __future__ import annotations
+
 import json
 import os
-import sys
-from typing import Dict, List
+from typing import Optional
 
+import typer
 from farlog import get_logger
 
 from funmirror.sync import SyncContext, make_platform, sync_org
@@ -15,18 +16,20 @@ logger = get_logger("funmirror")
 PLATFORMS = ["github", "gitee", "gitlab", "gitcode"]
 
 
-def _split_names(value: str) -> List[str]:
+def _split_names(value: str) -> list[str]:
     return [n.strip() for n in value.split(",") if n.strip()]
 
 
-def _state_namespace(args: argparse.Namespace) -> str:
+def _state_namespace(
+    src_platform: str, src_org: str, dst_platform: str, dst_org: str
+) -> str:
     """A state file may be shared across multiple src/dst platform pairs (e.g.
     mirroring the same org to both Gitee and GitLab); namespace each pair's
     entries so one pair's progress can never be mistaken for another's."""
-    return f"{args.src_platform}/{args.src_org}::{args.dst_platform}/{args.dst_org}"
+    return f"{src_platform}/{src_org}::{dst_platform}/{dst_org}"
 
 
-def _load_state(path: str, namespace: str) -> Dict[str, Dict[str, str]]:
+def _load_state(path: str, namespace: str) -> dict[str, dict[str, str]]:
     if not path or not os.path.exists(path):
         return {}
     with open(path) as f:
@@ -36,11 +39,11 @@ def _load_state(path: str, namespace: str) -> Dict[str, Dict[str, str]]:
 
 
 def _save_state(
-    path: str, namespace: str, updates: Dict[str, Dict[str, str]]
+    path: str, namespace: str, updates: dict[str, dict[str, str]]
 ) -> None:
     if not path:
         return
-    data: Dict[str, Dict[str, Dict[str, str]]] = {}
+    data: dict[str, dict[str, dict[str, str]]] = {}
     if os.path.exists(path):
         with open(path) as f:
             data = json.load(f)
@@ -55,34 +58,51 @@ def _save_state(
         f.write("\n")
 
 
-def _mirror(args: argparse.Namespace) -> int:
+def _mirror(
+    src_platform: str,
+    dst_platform: str,
+    src_org: str,
+    dst_org: str,
+    src_token: str = "",
+    dst_token: str = "",
+    src_key_file: str = "",
+    dst_key_file: str = "",
+    src_endpoint: str = "",
+    dst_endpoint: str = "",
+    repo_names: str = "",
+    workers: int = 8,
+    detect_workers: Optional[int] = None,
+    force: bool = True,
+    state_file: str = "",
+    incremental: bool = False,
+) -> int:
     src = make_platform(
-        args.src_platform,
-        token=args.src_token,
-        key_file=args.src_key_file,
-        endpoint=args.src_endpoint,
+        src_platform,
+        token=src_token,
+        key_file=src_key_file,
+        endpoint=src_endpoint,
     )
     dst = make_platform(
-        args.dst_platform,
-        token=args.dst_token,
-        key_file=args.dst_key_file,
-        endpoint=args.dst_endpoint,
+        dst_platform,
+        token=dst_token,
+        key_file=dst_key_file,
+        endpoint=dst_endpoint,
     )
-    ctx = SyncContext(src=src, dst=dst, force=args.force)
-    namespace = _state_namespace(args)
-    state = _load_state(args.state_file, namespace)
+    ctx = SyncContext(src=src, dst=dst, force=force)
+    namespace = _state_namespace(src_platform, src_org, dst_platform, dst_org)
+    state = _load_state(state_file, namespace)
 
     consumer = sync_org(
         ctx,
-        args.src_org,
-        args.dst_org,
-        repo_names=_split_names(args.repo_names) or None,
-        num_workers=args.workers,
-        num_detect_workers=args.detect_workers,
+        src_org,
+        dst_org,
+        repo_names=_split_names(repo_names) or None,
+        num_workers=workers,
+        num_detect_workers=detect_workers,
         state=state,
-        incremental=args.incremental,
+        incremental=incremental,
     )
-    _save_state(args.state_file, namespace, consumer.state_updates)
+    _save_state(state_file, namespace, consumer.state_updates)
 
     total = consumer.total
     summary = (
@@ -110,93 +130,96 @@ def _mirror(args: argparse.Namespace) -> int:
     return 0
 
 
-def _parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(
-        prog="funmirror", description="Mirror repos between two hosting platforms"
-    )
-    commands = parser.add_subparsers(dest="command", required=True)
+app = typer.Typer(help="Mirror repos between two hosting platforms")
 
-    mirror = commands.add_parser(
-        "mirror", help="mirror a source org's repos to a destination org"
-    )
-    mirror.add_argument("--src-platform", required=True, choices=PLATFORMS)
-    mirror.add_argument("--dst-platform", required=True, choices=PLATFORMS)
-    mirror.add_argument("--src-org", required=True)
-    mirror.add_argument("--dst-org", required=True)
-    mirror.add_argument("--src-token", default="")
-    mirror.add_argument("--dst-token", default="")
-    mirror.add_argument(
-        "--src-key-file", default="", help="SSH key file, only required for gitee"
-    )
-    mirror.add_argument(
-        "--dst-key-file", default="", help="SSH key file, only required for gitee"
-    )
-    mirror.add_argument(
-        "--src-endpoint", default="", help="self-hosted endpoint, only used for gitlab"
-    )
-    mirror.add_argument(
-        "--dst-endpoint", default="", help="self-hosted endpoint, only used for gitlab"
-    )
-    mirror.add_argument(
-        "--repo-names", default="", help="comma-separated; empty means all repos"
-    )
-    mirror.add_argument("--workers", type=int, default=8)
-    mirror.add_argument(
+
+@app.callback()
+def main() -> None:
+    """Mirror repos between two hosting platforms."""
+
+
+def _platform(value: str) -> str:
+    if value not in PLATFORMS:
+        raise typer.BadParameter(f"must be one of: {', '.join(PLATFORMS)}")
+    return value
+
+
+@app.command(help="mirror a source org's repos to a destination org")
+def mirror(
+    src_platform: str = typer.Option(..., "--src-platform", callback=_platform),
+    dst_platform: str = typer.Option(..., "--dst-platform", callback=_platform),
+    src_org: str = typer.Option(..., "--src-org"),
+    dst_org: str = typer.Option(..., "--dst-org"),
+    src_token: str = typer.Option("", "--src-token"),
+    dst_token: str = typer.Option("", "--dst-token"),
+    src_key_file: str = typer.Option(
+        "", "--src-key-file", help="SSH key file, only required for gitee"
+    ),
+    dst_key_file: str = typer.Option(
+        "", "--dst-key-file", help="SSH key file, only required for gitee"
+    ),
+    src_endpoint: str = typer.Option(
+        "", "--src-endpoint", help="self-hosted endpoint, only used for gitlab"
+    ),
+    dst_endpoint: str = typer.Option(
+        "", "--dst-endpoint", help="self-hosted endpoint, only used for gitlab"
+    ),
+    repo_names: str = typer.Option(
+        "", "--repo-names", help="comma-separated; empty means all repos"
+    ),
+    workers: int = typer.Option(8, "--workers"),
+    detect_workers: Optional[int] = typer.Option(
+        None,
         "--detect-workers",
-        type=int,
-        default=None,
         help=(
-            "concurrency for the read-only commit-id detection phase (runs before "
-            "--workers' clone+push phase); defaults to max(workers*4, 16). Keep "
-            "--workers low to protect a rate-limited destination while detection "
-            "still runs fast, since it never touches git."
+            "concurrency for the read-only commit-id detection phase; defaults "
+            "to max(workers*4, 16)"
         ),
-    )
-    mirror.add_argument("--force", dest="force", action="store_true", default=True)
-    mirror.add_argument("--no-force", dest="force", action="store_false")
-    mirror.add_argument(
+    ),
+    force: bool = typer.Option(True, "--force/--no-force"),
+    state_file: str = typer.Option(
+        "",
         "--state-file",
-        default="",
-        help=(
-            "path to a JSON file (namespaced by src/dst platform+org, so one file "
-            "can safely be shared across multiple pairs) mapping repo name -> "
-            "{src_sha, dst_sha} last confirmed in sync; read at start and "
-            "rewritten at the end with every processed repo's confirmed shas. "
-            "Empty disables state tracking."
-        ),
-    )
-    mirror.add_argument(
+        help="path to a JSON file that stores confirmed repository sync state",
+    ),
+    incremental: bool = typer.Option(
+        False,
         "--incremental",
-        action="store_true",
-        default=False,
-        help=(
-            "only query the src platform's commit id; a repo whose src sha still "
-            "matches --state-file is skipped entirely (dst is never queried). A "
-            "repo whose src sha changed is sent straight to sync without a dst "
-            "check either, trusting --state-file's bookkeeping that dst was in "
-            "sync as of the last recorded src sha. Without this flag (full sync), "
-            "every repo's dst is queried for real and compared directly against "
-            "src, ignoring --state-file for the decision (though it's still "
-            "refreshed from the confirmed results) -- use this periodically to "
-            "self-heal any drift."
-        ),
-    )
-    mirror.set_defaults(handler=_mirror)
-
-    return parser
-
-
-def funmirror() -> int:
-    args = _parser().parse_args()
+        help="skip destination checks when the source sha matches --state-file",
+    ),
+) -> None:
     try:
-        return args.handler(args)
+        exit_code = _mirror(
+            src_platform=src_platform,
+            dst_platform=dst_platform,
+            src_org=src_org,
+            dst_org=dst_org,
+            src_token=src_token,
+            dst_token=dst_token,
+            src_key_file=src_key_file,
+            dst_key_file=dst_key_file,
+            src_endpoint=src_endpoint,
+            dst_endpoint=dst_endpoint,
+            repo_names=repo_names,
+            workers=workers,
+            detect_workers=detect_workers,
+            force=force,
+            state_file=state_file,
+            incremental=incremental,
+        )
     except KeyboardInterrupt:
         logger.warning("Interrupted")
-        return 1
-    except Exception as exc:  # noqa: BLE001
-        logger.exception(f"funmirror failed: {exc}")
-        return 1
+        raise typer.Exit(1)
+    except Exception:
+        logger.exception("funmirror failed")
+        raise typer.Exit(1)
+    if exit_code:
+        raise typer.Exit(exit_code)
+
+
+def funmirror() -> None:
+    app()
 
 
 if __name__ == "__main__":
-    sys.exit(funmirror())
+    funmirror()
