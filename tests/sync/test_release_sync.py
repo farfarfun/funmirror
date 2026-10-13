@@ -45,6 +45,19 @@ def test_creates_release_and_uploads_every_asset():
     dst.release_assets.assert_not_called()
 
 
+def test_counts_every_release_it_looked_at_even_when_nothing_moved():
+    src = _src([Release(tag="v1", assets=[ReleaseAsset("a.tar.gz", 10)]), Release(tag="v2")])
+    dst = _dst(created=False, existing=[ReleaseAsset("a.tar.gz", 10, id="7")])
+
+    summary = sync_releases("repo1", "src-org", "dst-org", src, dst)
+
+    # Falsy (nothing changed) but not silent -- the caller needs to be able
+    # to tell a clean pass apart from a pass that never ran.
+    assert not summary
+    assert summary.releases_checked == 2
+    assert summary.describe() == "2 release(s) already there"
+
+
 def test_skips_assets_already_there_with_the_same_size():
     src = _src([Release(tag="v1", assets=[ReleaseAsset("a.tar.gz", 10)])])
     dst = _dst(created=False, existing=[ReleaseAsset("a.tar.gz", 10, id="7")])

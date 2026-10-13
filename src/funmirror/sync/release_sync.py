@@ -29,8 +29,10 @@ logger = get_logger("funmirror")
 class ReleaseSyncSummary:
     releases_created: int = 0
     assets_uploaded: int = 0
+    releases_checked: int = 0
 
     def __bool__(self) -> bool:
+        """Truthy means something *changed*, not merely that the pass ran."""
         return bool(self.releases_created or self.assets_uploaded)
 
     def describe(self) -> str:
@@ -39,7 +41,14 @@ class ReleaseSyncSummary:
             bits.append(f"{self.releases_created} release(s)")
         if self.assets_uploaded:
             bits.append(f"{self.assets_uploaded} asset(s)")
-        return ", ".join(bits)
+        if bits:
+            return ", ".join(bits)
+        # Nothing moved -- still worth a word. A bare "up to date" reads
+        # identically whether the release pass ran clean or was never
+        # switched on, and that is the one thing someone greps this line for.
+        if self.releases_checked:
+            return f"{self.releases_checked} release(s) already there"
+        return ""
 
 
 def _needs_upload(src: ReleaseAsset, dst: Optional[ReleaseAsset]) -> bool:
@@ -83,6 +92,7 @@ def sync_releases(
         # Oldest first, so an interrupted run leaves the destination with a
         # contiguous prefix of history rather than holes in the middle.
         for release in reversed(releases):
+            summary.releases_checked += 1
             release_id, created = dst.ensure_release(dst_org, repo, release)
             if created:
                 summary.releases_created += 1

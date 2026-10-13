@@ -178,13 +178,16 @@ def sync_repo(
         # Deliberately not recording state: the next run must retry this.
         return SyncResult(name, "failed", f"releases: {exc}")
 
+    note = released.describe()
     if released:
         result.status = "mirrored"
-        result.detail = (
-            f"{result.detail}, {released.describe()}"
-            if result.detail and result.detail != "up to date"
-            else released.describe()
-        )
+        # Drop the git half's "up to date" here -- the repo plainly wasn't.
+        base = "" if result.detail == "up to date" else result.detail
+        result.detail = f"{base}, {note}" if base else note
+    elif note:
+        # Nothing moved, so the git verdict still stands; the note just
+        # records that the releases were looked at rather than ignored.
+        result.detail = f"{result.detail}, {note}" if result.detail else note
     return result
 
 

@@ -37,7 +37,7 @@ caller's job (see "Incremental sync via a state file" below).
 ## Install
 
 ```bash
-pip install "git+https://github.com/farfarfun/funmirror.git@v0.5.0"
+pip install "git+https://github.com/farfarfun/funmirror.git@v0.5.1"
 ```
 
 ## Usage

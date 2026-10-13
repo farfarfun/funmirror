@@ -210,6 +210,25 @@ def test_sync_repo_skips_the_push_when_git_is_already_up_to_date():
     clone_and_push.assert_not_called()
     ctx.dst.ensure_repo.assert_not_called()
     assert result.status == "skipped"
+    # A repo with no releases at all has nothing to add to the git verdict.
+    assert result.detail == "up to date"
+
+
+def test_sync_repo_says_so_when_the_release_pass_ran_and_found_nothing():
+    """Otherwise a clean release pass logs identically to never having run
+    one, which is exactly the thing this switch exists to make visible."""
+    ctx = _release_ctx()
+
+    with patch(
+        "funmirror.sync.repo_sync.sync_releases",
+        return_value=ReleaseSyncSummary(releases_checked=8),
+    ):
+        result = sync_repo(
+            RepoRef("repo1", "main"), "src-org", "dst-org", ctx, "abc123", True
+        )
+
+    assert result.status == "skipped"
+    assert result.detail == "up to date, 8 release(s) already there"
 
 
 def test_sync_repo_reports_mirrored_when_only_releases_changed():
