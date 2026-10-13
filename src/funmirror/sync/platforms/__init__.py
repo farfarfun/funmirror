@@ -1,6 +1,12 @@
 """Hosting platforms funmirror can sync between: one module per platform."""
 
-from funmirror.sync.platforms.base import Platform, RepoRef
+from funmirror.sync.platforms.base import (
+    Platform,
+    Release,
+    ReleaseAsset,
+    ReleasesUnsupported,
+    RepoRef,
+)
 from funmirror.sync.platforms.github import GitHubPlatform
 from funmirror.sync.platforms.gitee import GiteePlatform, GiteeRepoExistsError
 from funmirror.sync.platforms.gitlab import GitLabPlatform
@@ -9,6 +15,9 @@ from funmirror.sync.platforms.gitcode import GitCodePlatform
 __all__ = [
     "Platform",
     "RepoRef",
+    "Release",
+    "ReleaseAsset",
+    "ReleasesUnsupported",
     "GitHubPlatform",
     "GiteePlatform",
     "GiteeRepoExistsError",

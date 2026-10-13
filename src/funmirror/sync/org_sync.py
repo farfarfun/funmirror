@@ -58,11 +58,11 @@ class DetectConsumer(BaseConsumer):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.terminal: List[SyncResult] = []
-        self.to_sync: List[Tuple[RepoRef, Optional[str]]] = []
+        self.to_sync: List[Tuple[RepoRef, Optional[str], bool]] = []
 
     def consume(self, item: DetectResult) -> None:
         if item.outcome == "sync":
-            self.to_sync.append((item.repo, item.src_sha))
+            self.to_sync.append((item.repo, item.src_sha, item.git_up_to_date))
         else:
             self.terminal.append(item.result)
 
@@ -73,9 +73,11 @@ class MirrorProcessor(BaseProcessor):
         self.dst_org = dst_org
         self.ctx = ctx
 
-    def process(self, item: Tuple[RepoRef, Optional[str]]) -> SyncResult:
-        repo, src_sha = item
-        return sync_repo(repo, self.src_org, self.dst_org, self.ctx, src_sha)
+    def process(self, item: Tuple[RepoRef, Optional[str], bool]) -> SyncResult:
+        repo, src_sha, git_up_to_date = item
+        return sync_repo(
+            repo, self.src_org, self.dst_org, self.ctx, src_sha, git_up_to_date
+        )
 
 
 class ResultConsumer(BaseConsumer):
@@ -125,6 +127,15 @@ def sync_org(
     mode. Every processed repo's confirmed src/dst shas are returned via
     `ResultConsumer.state_updates`, so callers can persist a fresh baseline.
     """
+    # Fail here rather than per-repo: with releases on, an unsupported
+    # platform pair would otherwise produce one identical failure per repo
+    # and bury the one line that explains why.
+    if ctx.sync_releases:
+        if not ctx.src.reads_releases:
+            raise ValueError(f"{ctx.src.name} cannot be a release source")
+        if not ctx.dst.writes_releases:
+            raise ValueError(f"{ctx.dst.name} cannot be a release destination")
+
     repos = (
         [
             RepoRef(name, ctx.src.default_branch(src_org, name) or "master")

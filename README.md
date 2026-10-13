@@ -9,7 +9,7 @@ Built for [`farfarfun-action/mirror-repo`](https://github.com/farfarfun-action/m
 which is a thin wrapper around this package's CLI. It reproduces the core
 behavior of [`Yikun/hub-mirror-action`](https://github.com/Yikun/hub-mirror-action)
 (clone from the source platform, force-push `refs/remotes/origin/*:refs/heads/*`
-plus tags to the destination) without depending on that action, and adds two
+plus tags to the destination) without depending on that action, and adds three
 things it doesn't have:
 
 - **Two-phase parallelism** — a cheap, read-only *detect* phase (via a
@@ -21,6 +21,8 @@ things it doesn't have:
 - **Skip-if-unchanged** — before cloning anything, the latest commit sha of
   the source and destination default branch is compared; if they already
   match, the repo is skipped entirely.
+- **Release mirroring** (`--sync-releases`) — releases *and their attached
+  files*, not just git refs. Off by default; see below.
 
 ## Architecture
 
@@ -35,7 +37,7 @@ caller's job (see "Incremental sync via a state file" below).
 ## Install
 
 ```bash
-pip install "git+https://github.com/farfarfun/funmirror.git@v0.4.0"
+pip install "git+https://github.com/farfarfun/funmirror.git@v0.5.0"
 ```
 
 ## Usage
@@ -135,6 +137,58 @@ fails to sync leaves its previous state entry untouched, so it's retried for
 real on the next run instead of being incorrectly marked up to date.
 `funmirror` only reads/writes the file locally; persisting it across CI runs
 (e.g. committing it back to a repo) is the caller's responsibility.
+
+## Mirroring releases
+
+A git mirror copies refs. It does not copy releases, and it certainly
+doesn't copy the binaries attached to them — which for a tool distributed as
+a prebuilt binary is the only part users actually need. `--sync-releases`
+adds a second pass, run strictly *after* the push (a release points at a
+tag; creating one for a tag the destination has never heard of either fails
+or invents one off the wrong commit):
+
+```bash
+funmirror mirror --src-platform github --dst-platform gitee \
+  --src-org my-org --dst-org my-org \
+  --src-token "$GITHUB_TOKEN" --dst-token "$GITEE_TOKEN" \
+  --dst-key-file ~/.ssh/gitee_deploy_key \
+  --repo-names my-tool \
+  --sync-releases --release-limit 5
+```
+
+Currently GitHub can be a release source and Gitee a release destination.
+Other combinations are rejected up front with one line, rather than failing
+identically once per repo.
+
+What the pass does, per release, oldest first:
+
+1. Look the release up on the destination by tag; create it if missing.
+   Drafts on the source are skipped — a draft isn't public there, so
+   mirroring it would leak it.
+2. Diff the attachments by name. Upload the missing ones; re-upload one
+   whose size disagrees (deleting the stale copy first — Gitee has no
+   overwrite, you'd end up with two files of the same name). Leave the rest
+   alone.
+3. Download and upload one asset at a time, deleting the local copy
+   immediately, so peak disk is one asset rather than one release.
+
+Two costs worth knowing before turning this on:
+
+- **Every selected repo gets a release listing on both sides, every run,
+  even the unchanged ones.** Publishing a release moves a tag, not the
+  default branch — so a repo whose branch sha is identical can still be
+  missing its newest release. Skipping those on the sha alone would make
+  release mirroring miss exactly the case it exists for. `--sync-releases`
+  therefore routes up-to-date repos into the sync phase too, where the
+  clone+push is skipped and only the release diff runs.
+- **`--release-limit N` caps it to the N most recent releases per repo.**
+  Default `0` is all of them; on a repo with a long history and large
+  binaries, the first run moves all of it.
+
+Needs `--dst-token` (the SSH key only covers git, not the REST API) and a
+`--src-token` for private sources. A repo with releases disabled reads as
+"no releases" rather than an error. A release failure fails that repo and
+leaves its state entry untouched, so the next run retries it.
 
 ## Development
 

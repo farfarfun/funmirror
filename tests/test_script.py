@@ -98,6 +98,9 @@ def test_mirror_cli_preserves_options_and_defaults():
                 "--state-file",
                 "state.json",
                 "--incremental",
+                "--sync-releases",
+                "--release-limit",
+                "5",
             ],
         )
 
@@ -119,6 +122,8 @@ def test_mirror_cli_preserves_options_and_defaults():
         force=False,
         state_file="state.json",
         incremental=True,
+        sync_releases=True,
+        release_limit=5,
     )
 
 

@@ -75,6 +75,8 @@ def _mirror(
     force: bool = True,
     state_file: str = "",
     incremental: bool = False,
+    sync_releases: bool = False,
+    release_limit: int = 0,
 ) -> int:
     src = make_platform(
         src_platform,
@@ -88,7 +90,13 @@ def _mirror(
         key_file=dst_key_file,
         endpoint=dst_endpoint,
     )
-    ctx = SyncContext(src=src, dst=dst, force=force)
+    ctx = SyncContext(
+        src=src,
+        dst=dst,
+        force=force,
+        sync_releases=sync_releases,
+        release_limit=release_limit,
+    )
     namespace = _state_namespace(src_platform, src_org, dst_platform, dst_org)
     state = _load_state(state_file, namespace)
 
@@ -187,6 +195,21 @@ def mirror(
         "--incremental",
         help="skip destination checks when the source sha matches --state-file",
     ),
+    sync_releases: bool = typer.Option(
+        False,
+        "--sync-releases/--no-sync-releases",
+        help=(
+            "also mirror releases and their attached files. Costs a release "
+            "listing per repo on both sides every run, including repos whose "
+            "commits are unchanged -- publishing a release moves a tag, not "
+            "the default branch"
+        ),
+    ),
+    release_limit: int = typer.Option(
+        0,
+        "--release-limit",
+        help="only mirror the N most recent releases per repo; 0 means all",
+    ),
 ) -> None:
     try:
         exit_code = _mirror(
@@ -206,6 +229,8 @@ def mirror(
             force=force,
             state_file=state_file,
             incremental=incremental,
+            sync_releases=sync_releases,
+            release_limit=release_limit,
         )
     except KeyboardInterrupt:
         logger.warning("Interrupted")

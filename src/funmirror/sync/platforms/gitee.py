@@ -1,13 +1,14 @@
 """Gitee REST API platform."""
 
+import os
 import threading
 import time
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Tuple
 
 import requests
 from farlog import get_logger
 
-from funmirror.sync.platforms.base import Platform, RepoRef
+from funmirror.sync.platforms.base import Platform, Release, ReleaseAsset, RepoRef
 
 logger = get_logger("funmirror")
 
@@ -33,6 +34,7 @@ def _retry(fn, *args, attempts: int = 3, delay: float = 2, **kwargs):
 
 class GiteePlatform(Platform):
     name = "gitee"
+    writes_releases = True
 
     def __init__(self, token: str, ssh_key_file: str = ""):
         self.token = token
@@ -49,12 +51,15 @@ class GiteePlatform(Platform):
         self._last_call = 0.0
 
     def _request(self, method: str, url: str, **kwargs) -> requests.Response:
+        # setdefault, not a positional timeout=30: asset uploads need minutes,
+        # and passing their own timeout= must not collide with ours.
+        kwargs.setdefault("timeout", 30)
         with self._lock:
             wait = self._min_interval - (time.monotonic() - self._last_call)
             if wait > 0:
                 time.sleep(wait)
             try:
-                return self._session.request(method, url, timeout=30, **kwargs)
+                return self._session.request(method, url, **kwargs)
             finally:
                 self._last_call = time.monotonic()
 
@@ -149,3 +154,106 @@ class GiteePlatform(Platform):
                 "-o IdentitiesOnly=yes"
             )
         }
+
+    # --- releases -----------------------------------------------------------
+
+    def _release_by_tag(self, org: str, repo: str, tag: str) -> Optional[dict]:
+        resp = self._request(
+            "GET",
+            f"{API}/repos/{org}/{repo}/releases/tags/{tag}",
+            params={"access_token": self.token},
+        )
+        if resp.status_code == 404:
+            return None
+        if resp.status_code != 200:
+            raise RuntimeError(
+                f"unexpected status reading release {tag} of {org}/{repo}: "
+                f"{resp.status_code} {resp.text}"
+            )
+        return resp.json()
+
+    def ensure_release(self, org: str, repo: str, release: Release) -> Tuple[str, bool]:
+        existing = _retry(self._release_by_tag, org, repo, release.tag)
+        if existing:
+            return str(existing["id"]), False
+
+        resp = self._request(
+            "POST",
+            f"{API}/repos/{org}/{repo}/releases",
+            data={
+                "access_token": self.token,
+                "tag_name": release.tag,
+                "name": release.name or release.tag,
+                # Gitee rejects an empty body outright ("发行版的描述不能为空"),
+                # and GitHub releases cut by a CI job very often have one.
+                "body": release.body or release.name or release.tag,
+                "prerelease": "true" if release.prerelease else "false",
+                "target_commitish": release.target_commitish or "master",
+            },
+        )
+        if resp.status_code in (200, 201):
+            return str(resp.json()["id"]), True
+        # Another worker (or a previous half-finished run) got there first.
+        if resp.status_code in (400, 422):
+            existing = self._release_by_tag(org, repo, release.tag)
+            if existing:
+                return str(existing["id"]), False
+        raise RuntimeError(
+            f"failed to create release {release.tag} on {org}/{repo}: "
+            f"{resp.status_code} {resp.text}"
+        )
+
+    def release_assets(self, org: str, repo: str, release_id: str) -> List[ReleaseAsset]:
+        resp = self._request(
+            "GET",
+            f"{API}/repos/{org}/{repo}/releases/{release_id}/attach_files",
+            params={"access_token": self.token, "per_page": 100},
+        )
+        if resp.status_code == 404:
+            return []
+        resp.raise_for_status()
+        # Gitee's auto-generated source archives ({tag}.zip / {tag}.tar.gz) are
+        # not attach_files, so they never show up here and never collide with
+        # a real asset of the same name.
+        return [
+            ReleaseAsset(
+                name=item["name"],
+                size=item.get("size", -1),
+                id=str(item["id"]),
+            )
+            for item in resp.json()
+        ]
+
+    def upload_asset(self, org: str, repo: str, release_id: str, path: str) -> None:
+        with open(path, "rb") as fh:
+            resp = self._request(
+                "POST",
+                f"{API}/repos/{org}/{repo}/releases/{release_id}/attach_files",
+                data={"access_token": self.token},
+                files={"file": (os.path.basename(path), fh)},
+                # The throttling lock is held for the whole upload, so this is
+                # also how long every other Gitee call can be stalled. Generous
+                # anyway: a few hundred MB over a slow link from a CI runner.
+                timeout=600,
+            )
+        if resp.status_code in (200, 201):
+            return
+        raise RuntimeError(
+            f"failed to upload {os.path.basename(path)} to release "
+            f"{release_id} of {org}/{repo}: {resp.status_code} {resp.text}"
+        )
+
+    def delete_asset(
+        self, org: str, repo: str, release_id: str, asset: ReleaseAsset
+    ) -> None:
+        resp = self._request(
+            "DELETE",
+            f"{API}/repos/{org}/{repo}/releases/{release_id}/attach_files/{asset.id}",
+            params={"access_token": self.token},
+        )
+        if resp.status_code in (200, 204, 404):
+            return
+        raise RuntimeError(
+            f"failed to delete attachment {asset.name} from release "
+            f"{release_id} of {org}/{repo}: {resp.status_code} {resp.text}"
+        )

@@ -1,8 +1,10 @@
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
+
+import pytest
 
 from funmirror.sync.org_sync import sync_org
 from funmirror.sync.platforms.base import Platform, RepoRef
-from funmirror.sync.repo_sync import SyncContext
+from funmirror.sync.repo_sync import SyncContext, SyncResult
 
 
 def _ctx() -> SyncContext:
@@ -76,3 +78,50 @@ def test_sync_org_full_sync_collects_state_updates_for_mirrored_and_skipped_not_
     assert consumer.skipped == ["ok"]
     assert consumer.failed == ["boom"]
     assert consumer.state_updates == {"ok": {"src_sha": "sha-ok", "dst_sha": "sha-ok"}}
+
+
+def _release_ctx() -> SyncContext:
+    """Mock(spec=Platform) picks up the class attribute defaults (both False),
+    so a release-capable pair has to say so explicitly."""
+    ctx = SyncContext(src=Mock(spec=Platform), dst=Mock(spec=Platform))
+    ctx.sync_releases = True
+    ctx.src.reads_releases = True
+    ctx.dst.writes_releases = True
+    return ctx
+
+
+def test_sync_org_rejects_a_platform_pair_that_cannot_do_releases():
+    """One line up front beats the same failure repeated once per repo."""
+    ctx = _release_ctx()
+    ctx.dst.writes_releases = False
+    ctx.dst.name = "gitlab"
+
+    with pytest.raises(ValueError, match="gitlab cannot be a release destination"):
+        sync_org(ctx, "src-org", "dst-org", repo_names=["repo1"])
+
+
+def test_sync_org_rejects_a_source_that_cannot_read_releases():
+    ctx = _release_ctx()
+    ctx.src.reads_releases = False
+    ctx.src.name = "gitcode"
+
+    with pytest.raises(ValueError, match="gitcode cannot be a release source"):
+        sync_org(ctx, "src-org", "dst-org", repo_names=["repo1"])
+
+
+def test_sync_org_still_runs_phase_two_for_an_up_to_date_repo_when_releases_are_on():
+    ctx = _release_ctx()
+    ctx.src.default_branch.return_value = "main"
+    ctx.src.branch_sha.return_value = "abc123"
+    ctx.dst.branch_sha.return_value = "abc123"
+
+    with patch(
+        "funmirror.sync.org_sync.sync_repo",
+        return_value=SyncResult("repo1", "mirrored", "1 asset(s)", "abc123", "abc123"),
+    ) as sync:
+        consumer = sync_org(ctx, "src-org", "dst-org", repo_names=["repo1"])
+
+    assert consumer.mirrored == ["repo1"]
+    # The git_up_to_date flag has to reach phase 2, or it re-clones a repo it
+    # just proved was identical.
+    assert sync.call_args[0][5] is True
