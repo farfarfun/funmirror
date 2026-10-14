@@ -1,6 +1,7 @@
 """Gitee REST API platform."""
 
 import os
+import subprocess
 import threading
 import time
 from typing import Dict, List, Optional, Tuple
@@ -50,6 +51,14 @@ class GiteePlatform(Platform):
         self._min_interval = 0.5
         self._last_call = 0.0
 
+        # Ref lookups go over the git transport instead (see branch_sha), which
+        # is a different front door and not behind that WAF -- so they get to
+        # run in parallel. Bounded all the same: 8 is what the sync phase
+        # already pushes at, i.e. the one concurrency we have evidence Gitee
+        # tolerates. Detect runs 32 workers by default and they would otherwise
+        # all land at once.
+        self._git_slots = threading.BoundedSemaphore(8)
+
     def _request(self, method: str, url: str, **kwargs) -> requests.Response:
         # setdefault, not a positional timeout=30: asset uploads need minutes,
         # and passing their own timeout= must not collide with ours.
@@ -91,14 +100,68 @@ class GiteePlatform(Platform):
         return resp.json().get("default_branch")
 
     def branch_sha(self, org: str, repo: str, branch: str) -> Optional[str]:
-        resp = self._request(
-            "GET",
-            f"{API}/repos/{org}/{repo}/branches/{branch}",
-            params={"access_token": self.token},
-        )
-        if resp.status_code != 200:
+        """Head commit of org/repo's `branch`, read over the git transport.
+
+        Deliberately not `GET /repos/{org}/{repo}/branches/{branch}`. A full
+        sync asks for exactly one of these per repo, and every REST call is
+        serialized by the throttle above: 139 repos measured at ~164 seconds,
+        which was 95% of the entire run's wall clock and nearly all of it spent
+        waiting out the minimum interval. `git ls-remote` answers the same
+        question, isn't rate-limited the same way, and runs eight at a time.
+        """
+        with self._git_slots:
+            proc = subprocess.run(
+                [
+                    "git",
+                    # Nothing here may ever block on a human. An inherited
+                    # credential helper will happily sit there forever being
+                    # asked for a password nobody is going to type, and it
+                    # holds one of the eight slots above the entire time --
+                    # observed hanging a lookup for a full two minutes.
+                    "-c",
+                    "credential.helper=",
+                    "ls-remote",
+                    self.clone_url(org, repo),
+                    f"refs/heads/{branch}",
+                ],
+                env=self._git_subprocess_env(),
+                capture_output=True,
+                text=True,
+                # Backstop for a connection that dies without saying so. Well
+                # clear of a slow cross-border lookup, well short of letting
+                # one bad repo stall a slot for minutes.
+                timeout=60,
+            )
+        if proc.returncode != 0:
+            # Same verdict the REST version gave for any non-200, and for the
+            # same reason: we don't know, so let the destination be treated as
+            # stale and have phase 2 settle it with an authoritative
+            # ensure_repo. Far and away the usual cause is a repo that simply
+            # isn't on this side yet.
+            #
+            # Being this relaxed is only safe because the one failure that
+            # would really hurt -- SSH to gitee.com down, turning all 139 repos
+            # into needless clone+pushes -- can't reach here: the mirror-repo
+            # action's ssh-keyscan preflight fails the run first.
+            logger.debug(f"{repo}: ls-remote failed: {proc.stderr.strip()}")
             return None
-        return resp.json().get("commit", {}).get("sha")
+        line = proc.stdout.strip()
+        # Exit 0 with nothing on stdout means the repo is there, the branch isn't.
+        return line.split()[0] if line else None
+
+    def _git_subprocess_env(self) -> Dict[str, str]:
+        env = os.environ.copy()
+        env["GIT_TERMINAL_PROMPT"] = "0"
+        # GIT_TERMINAL_PROMPT only closes the terminal door. git still reaches
+        # for an askpass helper when it has one, and an editor's helper
+        # (VS Code exports GIT_ASKPASS unconditionally) will block forever
+        # rather than return, which is how a single lookup sat for two minutes
+        # holding a slot. CI runners don't set these; developer shells do, and
+        # running funmirror by hand is the case this tool exists for.
+        for var in ("GIT_ASKPASS", "SSH_ASKPASS"):
+            env.pop(var, None)
+        env.update(self.git_env())
+        return env
 
     def _repo_exists(self, org: str, repo: str) -> bool:
         resp = self._request(
@@ -148,10 +211,19 @@ class GiteePlatform(Platform):
         return f"git@gitee.com:{org}/{repo}.git"
 
     def git_env(self) -> Dict[str, str]:
+        # No key configured: say nothing and let ssh use whatever the host
+        # already has (agent, ~/.ssh/id_*). Interpolating an empty path here
+        # would build `ssh -i  -o StrictHostKeyChecking=no ...`, where -i eats
+        # the following -o and the option silently goes missing.
+        if not self.ssh_key_file:
+            return {}
         return {
+            # BatchMode for the same reason the credential helper is disabled
+            # in branch_sha: ssh must fail rather than stop and ask for a
+            # passphrase. Nothing calling this has a terminal attached.
             "GIT_SSH_COMMAND": (
                 f"ssh -i {self.ssh_key_file} -o StrictHostKeyChecking=no "
-                "-o IdentitiesOnly=yes"
+                "-o IdentitiesOnly=yes -o BatchMode=yes"
             )
         }
 

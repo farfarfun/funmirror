@@ -109,6 +109,34 @@ class ResultConsumer(BaseConsumer):
             }
 
 
+# Below this many names, asking about each one beats paging the whole org.
+_LIST_INSTEAD_OF_ASKING = 4
+
+
+def _resolve_named(ctx: SyncContext, src_org: str, names: List[str]) -> List[RepoRef]:
+    """Pair each requested repo name with its default branch.
+
+    One org listing covers the lot, and that is the whole point: asking the
+    source for each name separately is one serialized round trip per repo
+    before any pipeline starts, which measured at ~20s for 139 repos on every
+    single run. Paging the org answers all of them in two calls.
+
+    Anything the listing doesn't cover still gets asked about individually --
+    a name can legitimately be outside the org listing.
+    """
+    listed: Dict[str, RepoRef] = {}
+    if len(names) >= _LIST_INSTEAD_OF_ASKING:
+        listed = {repo.name: repo for repo in ctx.src.list_repos(src_org)}
+
+    resolved: List[RepoRef] = []
+    for name in names:
+        hit = listed.get(name)
+        resolved.append(
+            hit or RepoRef(name, ctx.src.default_branch(src_org, name) or "master")
+        )
+    return resolved
+
+
 def sync_org(
     ctx: SyncContext,
     src_org: str,
@@ -137,10 +165,7 @@ def sync_org(
             raise ValueError(f"{ctx.dst.name} cannot be a release destination")
 
     repos = (
-        [
-            RepoRef(name, ctx.src.default_branch(src_org, name) or "master")
-            for name in repo_names
-        ]
+        _resolve_named(ctx, src_org, repo_names)
         if repo_names
         else ctx.src.list_repos(src_org)
     )

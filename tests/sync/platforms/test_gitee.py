@@ -147,3 +147,83 @@ def test_request_timeout_can_be_overridden():
 
     assert request.call_args_list[0].kwargs["timeout"] == 30
     assert request.call_args_list[1].kwargs["timeout"] == 600
+
+
+def _proc(returncode: int = 0, stdout: str = "", stderr: str = ""):
+    return Mock(returncode=returncode, stdout=stdout, stderr=stderr)
+
+
+def test_branch_sha_reads_the_ref_over_git_not_the_rest_api():
+    platform = _platform()
+    with patch(
+        "funmirror.sync.platforms.gitee.subprocess.run",
+        return_value=_proc(stdout="abc123\trefs/heads/main\n"),
+    ) as run, patch.object(platform._session, "request") as request:
+        assert platform.branch_sha("org", "repo1", "main") == "abc123"
+
+    assert run.call_args[0][0] == [
+        "git",
+        "-c",
+        "credential.helper=",
+        "ls-remote",
+        "git@gitee.com:org/repo1.git",
+        "refs/heads/main",
+    ]
+    # The whole point: this call must not go near the throttled REST session.
+    request.assert_not_called()
+
+
+def test_branch_sha_is_none_when_the_branch_is_absent():
+    """ls-remote exits 0 with no output when the repo is there and the ref isn't."""
+    platform = _platform()
+    with patch(
+        "funmirror.sync.platforms.gitee.subprocess.run", return_value=_proc(stdout="")
+    ):
+        assert platform.branch_sha("org", "repo1", "main") is None
+
+
+def test_branch_sha_is_none_when_ls_remote_fails():
+    platform = _platform()
+    with patch(
+        "funmirror.sync.platforms.gitee.subprocess.run",
+        return_value=_proc(returncode=128, stderr="Repository not found"),
+    ):
+        assert platform.branch_sha("org", "repo1", "main") is None
+
+
+def test_branch_sha_passes_the_ssh_key_through_to_git():
+    platform = _platform()
+    with patch(
+        "funmirror.sync.platforms.gitee.subprocess.run",
+        return_value=_proc(stdout="abc123\trefs/heads/main\n"),
+    ) as run:
+        platform.branch_sha("org", "repo1", "main")
+
+    env = run.call_args.kwargs["env"]
+    assert "/tmp/does-not-matter" in env["GIT_SSH_COMMAND"]
+    assert env["GIT_TERMINAL_PROMPT"] == "0"
+
+
+def test_git_env_is_empty_without_a_key_file():
+    """`ssh -i '' -o ...` would have -i swallow the -o that follows it."""
+    assert GiteePlatform(token="token").git_env() == {}
+
+
+def test_branch_sha_strips_inherited_askpass_helpers():
+    """An editor's askpass helper blocks forever instead of failing."""
+    platform = _platform()
+    with patch.dict(
+        "os.environ", {"GIT_ASKPASS": "/vscode/askpass.sh", "SSH_ASKPASS": "/x"}
+    ), patch(
+        "funmirror.sync.platforms.gitee.subprocess.run",
+        return_value=_proc(stdout="abc123\trefs/heads/main\n"),
+    ) as run:
+        platform.branch_sha("org", "repo1", "main")
+
+    env = run.call_args.kwargs["env"]
+    assert "GIT_ASKPASS" not in env
+    assert "SSH_ASKPASS" not in env
+
+
+def test_git_env_runs_ssh_in_batch_mode():
+    assert "BatchMode=yes" in _platform().git_env()["GIT_SSH_COMMAND"]

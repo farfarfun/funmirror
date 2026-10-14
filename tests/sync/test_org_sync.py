@@ -125,3 +125,50 @@ def test_sync_org_still_runs_phase_two_for_an_up_to_date_repo_when_releases_are_
     # The git_up_to_date flag has to reach phase 2, or it re-clones a repo it
     # just proved was identical.
     assert sync.call_args[0][5] is True
+
+
+def test_named_repos_are_resolved_with_one_listing_not_one_call_each():
+    ctx = _ctx()
+    names = ["repo1", "repo2", "repo3", "repo4"]
+    ctx.src.list_repos.return_value = [RepoRef(n, "main") for n in names]
+    ctx.src.branch_sha.return_value = "abc123"
+    ctx.dst.branch_sha.return_value = "abc123"
+
+    consumer = sync_org(ctx, "src-org", "dst-org", repo_names=names)
+
+    assert sorted(consumer.skipped) == names
+    ctx.src.list_repos.assert_called_once_with("src-org")
+    # One serialized round trip per repo is what this replaced.
+    ctx.src.default_branch.assert_not_called()
+
+
+def test_a_named_repo_outside_the_listing_still_gets_asked_about():
+    ctx = _ctx()
+    ctx.src.list_repos.return_value = [RepoRef("repo1", "main")]
+    ctx.src.default_branch.return_value = "trunk"
+    ctx.src.branch_sha.return_value = "abc123"
+    ctx.dst.branch_sha.return_value = "abc123"
+
+    sync_org(
+        ctx, "src-org", "dst-org", repo_names=["repo1", "elsewhere", "x", "y"]
+    )
+
+    assert ctx.src.default_branch.call_args_list == [
+        (("src-org", "elsewhere"),),
+        (("src-org", "x"),),
+        (("src-org", "y"),),
+    ]
+    assert ("src-org", "elsewhere", "trunk") in {
+        tuple(c[0]) for c in ctx.src.branch_sha.call_args_list
+    }
+
+
+def test_a_handful_of_names_is_not_worth_paging_the_whole_org():
+    ctx = _ctx()
+    ctx.src.default_branch.return_value = "main"
+    ctx.src.branch_sha.return_value = "abc123"
+    ctx.dst.branch_sha.return_value = "abc123"
+
+    sync_org(ctx, "src-org", "dst-org", repo_names=["repo1"])
+
+    ctx.src.list_repos.assert_not_called()
