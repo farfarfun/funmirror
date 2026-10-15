@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.6.1
+
+### 变更（破坏性：声明的 Python 下限收窄）
+
+- `requires-python` 从 `>=3.9` 改为 `>=3.10`，`funworker` 下限从 `>=0.0.1`
+  抬到 `>=0.1.1`。原来这两条声明互相矛盾，3.9 从来就跑不起来：
+  `src/funmirror/sync/org_sync.py` import 的 `BaseConsumer` /
+  `BaseProcessor` / `BaseProducer` / `Pipeline` 最早由 funworker 0.1.1 提供，
+  而 0.1.1 及之后每个版本都声明 `requires-python >=3.10`——3.9 上装不到任何
+  可用的 funworker。解析器于是回落到 funworker 0.0.1，而那个 wheel 里根本
+  没有 `funworker` 包（只有一个 `funapi/`），`import funworker` 直接
+  ModuleNotFoundError。
+- **迁移**：3.9 用户需升级到 3.10 及以上。本次只让声明与既有依赖事实对齐，
+  没有任何代码行为变化（funmirror 自身源码不含 3.10+ 语法）。3.9 上的安装
+  现在会在依赖解析期给出明确的版本冲突报错，而不是装完之后再在 import 时炸。
+
 ## 0.6.0
 
 Full syncs were spending nearly all of their wall clock waiting, not working.
